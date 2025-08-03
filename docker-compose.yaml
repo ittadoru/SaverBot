@@ -1,0 +1,19 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    image: ittadoru/saverbot:latest
+    volumes:
+      - ./.env:/app/.env:ro
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
+    command: >
+      /bin/bash -c "source /app/venv/bin/activate && uvicorn utils.server:app --host 0.0.0.0 --port 8000 & python bot.py"
