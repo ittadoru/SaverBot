@@ -5,6 +5,7 @@ from utils import logger as log
 from config import ADMINS, REDIS_URL
 from datetime import timedelta
 import re
+import json
 
 
 r = redis.from_url(REDIS_URL, decode_responses=True)
@@ -235,3 +236,43 @@ async def check_and_remove_expired_subscriber(user_id: int):
         await r.delete(expire_key)
         return True  # был удалён
     return False  # ещё активен или не подписчик
+
+
+
+SUPPORT_TICKET_PREFIX = "support_ticket:"
+
+async def create_support_ticket(user_id: int, username: str, topic_id: int):
+    ticket_key = f"{SUPPORT_TICKET_PREFIX}{user_id}"
+    ticket = {
+        "topic_id": topic_id,
+        "username": username,
+        "status": "open"
+    }
+    await r.set(ticket_key, json.dumps(ticket))
+
+async def get_support_ticket(user_id: int):
+    ticket_key = f"{SUPPORT_TICKET_PREFIX}{user_id}"
+    ticket_data = await r.get(ticket_key)
+    if ticket_data:
+        return json.loads(ticket_data)
+    return None
+
+async def close_support_ticket(user_id: int):
+    ticket = await get_support_ticket(user_id)
+    if ticket:
+        ticket["status"] = "closed"
+        await r.set(f"{SUPPORT_TICKET_PREFIX}{user_id}", json.dumps(ticket))
+
+async def is_support_ticket_open(user_id: int) -> bool:
+    ticket = await get_support_ticket(user_id)
+    return ticket and ticket["status"] == "open"
+
+async def get_user_id_by_topic_id(topic_id: int):
+    keys = await r.keys(f"{SUPPORT_TICKET_PREFIX}*")
+    for key in keys:
+        ticket_data = await r.get(key)
+        if ticket_data:
+            ticket = json.loads(ticket_data)
+            if ticket["topic_id"] == topic_id:
+                return int(key.split(":")[1])
+    return None

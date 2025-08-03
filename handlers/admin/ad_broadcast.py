@@ -2,9 +2,9 @@ from aiogram import Router, types
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from utils import redis
-
+from config import ADMIN_ERROR
 from states.ad_broadcast import AdBroadcastStates
-
+from utils import logger as log
 router = Router()
 
 
@@ -28,11 +28,19 @@ async def process_ad_broadcast(message: types.Message, state: FSMContext):
     try:
         await message.reply(f"Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам).")
     except Exception as e:
+        import traceback
+        error_text = f"Ошибка: {e}"
+        full_trace = traceback.format_exc()
+        log.log_error(error_text)
+        log.log_error(full_trace)
+        # Отправка сообщения админу (замените на нужный ID)
         try:
-            await message.answer(f"Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам).")
-        except Exception:
-            try:
-                await message.bot.send_message(message.from_user.id, f"❗️ Ошибка отправки результата рассылки: {str(e)}")
-            except Exception:
-                pass
+            await message.bot.send_message(
+                ADMIN_ERROR,
+                f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
+                parse_mode="HTML"
+            )
+        except Exception as send_err:
+            log.log_error(f"Не удалось отправить ошибку админу: {send_err}")
+
     await state.clear()

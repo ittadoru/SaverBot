@@ -1,4 +1,5 @@
 import logging
+import traceback
 import colorlog
 import os
 from datetime import datetime

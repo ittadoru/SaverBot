@@ -3,6 +3,7 @@ from aiogram.fsm.context import FSMContext
 from states.broadcast import Broadcast
 from utils.redis import r
 from config import ADMINS
+from utils import logger as log
 
 router = Router()
 
@@ -23,14 +24,18 @@ async def handle_broadcast(message: types.Message, state: FSMContext):
         return
     user_ids = await r.smembers("users")
     sent = 0
+    log.log_message(f"🚀 Начата рассылка: {message.text or '[не текстовое сообщение]'}", emoji="📢")
     for uid in user_ids:
         try:
             await message.send_copy(int(uid))
             sent += 1
-        except Exception:
-            pass
+        except Exception as e:
+            log.log_error(f"Ошибка при отправке рассылки пользователю {uid}: {e}")
+    log.log_message(f"✅ Рассылка завершена. Отправлено {sent} пользователям.", emoji="📬")
     await message.answer(f"✅ Отправлено {sent} пользователям.")
     await state.clear()
+
+
 @router.callback_query(lambda c: c.data == "admin_menu")
 async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()

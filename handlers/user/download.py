@@ -11,6 +11,8 @@ from services.youtube.pytube_downloader import PyTubeDownloader
 from services.youtube.yt_dlp_downloader import YTDLPDownloader
 from config import USE_PYTUBE
 import asyncio
+from config import ADMIN_ERROR
+
 
 router = Router()
 
@@ -41,8 +43,20 @@ async def download_handler(message: types.Message, state: FSMContext):
         await push_recent_link(user.id, url)
         await increment_download(platform, user_id=user.id)
     except Exception as e:
-        log.log_error(e, user.username, "Скачивание и отправка пользователю")
-        await message.answer("Произошла ошибка, пожалуйста попробуйте позже")
+        import traceback
+        error_text = f"Ошибка: {e}"
+        full_trace = traceback.format_exc()
+        log.log_error(error_text)
+        log.log_error(full_trace)
+        # Отправка сообщения админу (замените на нужный ID)
+        try:
+            await message.bot.send_message(
+                ADMIN_ERROR,
+                f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
+                parse_mode="HTML"
+            )
+        except Exception as send_err:
+            log.log_error(f"Не удалось отправить ошибку админу: {send_err}")
 
 
 @router.callback_query(lambda c: c.data.startswith("yt_download:"))
@@ -84,7 +98,7 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
                     "480": 'bestvideo[ext=mp4][vcodec^=avc1][height<=480]+bestaudio[ext=m4a]/best[ext=mp4]',
                     "720": 'bestvideo[ext=mp4][vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]',
                 }
-                file_path = await yt_dlp_dl.download(url, user.id, custom_format=res_map_dl.get(res, res_map_dl["480"]))
+                file_path = await yt_dlp_dl.download(url, user.id, custom_format=res_map_dl.get(res, res_map_dl["480"]), message=callback.message)
 
             width, height = get_video_resolution(file_path)
             asyncio.create_task(send_video(callback.bot, callback.message.chat.id, user.id, file_path, width, height))
@@ -111,5 +125,17 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
         await increment_download("youtube", user_id=user.id)
 
     except Exception as e:
-        log.log_error(e, user.username, "Скачивание и отправка пользователю")
-        await callback.message.answer("Произошла ошибка, попробуйте позже")
+        import traceback
+        error_text = f"Ошибка: {e}"
+        full_trace = traceback.format_exc()
+        log.log_error(error_text)
+        log.log_error(full_trace)
+        # Отправка сообщения админу (замените на нужный ID)
+        try:
+            await callback.message.bot.send_message(
+                ADMIN_ERROR,
+                f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
+                parse_mode="HTML"
+            )
+        except Exception as send_err:
+            log.log_error(f"Не удалось отправить ошибку админу: {send_err}")

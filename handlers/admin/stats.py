@@ -4,7 +4,8 @@ from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
 from redis.exceptions import RedisError
 import datetime
-
+from utils import logger as log
+from config import ADMIN_ERROR
 from utils.redis import r
 
 router = Router()
@@ -40,11 +41,22 @@ async def handle_stats(callback: CallbackQuery):
         )
         await callback.message.edit_text(msg, parse_mode="HTML", reply_markup=keyboard)
         await callback.answer()
-        
 
-    except RedisError as e:
-        await callback.message.answer("Ошибка при получении статистики.")
-        await callback.answer()
+    except Exception as e:
+        import traceback
+        error_text = f"Ошибка: {e}"
+        full_trace = traceback.format_exc()
+        log.log_error(error_text)
+        log.log_error(full_trace)
+        # Отправка сообщения админу (замените на нужный ID)
+        try:
+            await callback.message.bot.send_message(
+                ADMIN_ERROR,
+                f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
+                parse_mode="HTML"
+            )
+        except Exception as send_err:
+            log.log_error(f"Не удалось отправить ошибку админу: {send_err}")
 
 
 @router.callback_query(lambda c: c.data == "top_week")

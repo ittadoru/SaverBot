@@ -16,7 +16,7 @@ async def show_user_history(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(HistoryStates.waiting_for_id_or_username)
     keyboard = types.InlineKeyboardMarkup(
         inline_keyboard=[
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
         ]
     )
     await callback.message.edit_text("⚠️ Введите ID или username пользователя:", reply_markup=keyboard)
@@ -40,7 +40,7 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
     if user_id is None:
         keyboard = types.InlineKeyboardMarkup(
             inline_keyboard=[
-                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
+                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
             ]
         )
         await message.answer("❌ Пользователь не найден.", reply_markup=keyboard)
@@ -50,7 +50,7 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
     if not user_data:
         keyboard = types.InlineKeyboardMarkup(
             inline_keyboard=[
-                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
+                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
             ]
         )
         await message.answer("❌ Данные пользователя не найдены.", reply_markup=keyboard)
@@ -62,6 +62,7 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
     user_info = f"<b>👤 Пользователь:</b>\n\n"
     user_info += f"ID: <code>{user_id}</code>\n"
     user_info += f"Имя: {name}\n"
+
     if username:
         user_info += f"Username: @{username}\n"
     keyboard = types.InlineKeyboardMarkup(
@@ -73,6 +74,7 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
         await message.answer(user_info + "\nℹ️ У пользователя нет недавних ссылок.", parse_mode="HTML", reply_markup=keyboard)
         await state.clear()
         return
+    
     links_text = "\n".join([f"<pre>{link}</pre>" for link in links])
     full_text = user_info + "\n\n<b>🔗 Последние ссылки:</b>\n\n" + links_text
     await message.answer(full_text, parse_mode="HTML", reply_markup=keyboard)
