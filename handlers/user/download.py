@@ -3,12 +3,12 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from handlers.admin.history import HistoryStates
 from utils.redis import is_subscriber, log_user_activity, push_recent_link, increment_download
-from utils.platform_detect import detect_platform
 from utils import logger as log
 from utils.video_utils import get_video_resolution
 from utils.send import send_video, send_audio
 from services.youtube.pytube_downloader import PyTubeDownloader
 from services.youtube.yt_dlp_downloader import YTDLPDownloader
+from services import get_downloader
 from config import USE_PYTUBE, ADMIN_ERROR
 import asyncio
 
@@ -24,8 +24,9 @@ async def download_handler(message: types.Message, state: FSMContext):
     """
     url = message.text.strip()
     user = message.from_user
-    platform = detect_platform(url)
+    downloader = get_downloader(url)
 
+    platform = "youtube" if downloader.__class__.__name__ == "YTDLPDownloader" or downloader.__class__.__name__ == "PyTubeDownloader" else None
     if platform == "youtube" and await is_subscriber(user.id):
         # Сохраняем ссылку в состоянии и предлагаем выбрать качество
         await state.update_data({f"yt_url_{user.id}": url})
@@ -43,13 +44,12 @@ async def download_handler(message: types.Message, state: FSMContext):
     await message.answer("⏳ Подождите немножко, видео скачивается...")
 
     try:
-        downloader = YTDLPDownloader()  # yt-dlp для скачивания
         file_path = await downloader.download(url, user.id)
 
         width, height = get_video_resolution(file_path)
 
         # Отправка видео асинхронно, чтобы не блокировать обработчик
-        asyncio.create_task(send_video(message.bot, message.chat.id, user.id, file_path, width, height))
+        asyncio.create_task(send_video(message.bot, message, message.chat.id, user.id, file_path, width, height))
 
         await log_user_activity(user.id)
         await push_recent_link(user.id, url)
@@ -59,8 +59,8 @@ async def download_handler(message: types.Message, state: FSMContext):
         import traceback
         error_text = f"Ошибка: {e}"
         full_trace = traceback.format_exc()
-        log.log_error(error_text)
-        log.log_error(full_trace)
+        log.log_error(error_text, user.username, f"Ошибка при скачивании: {url}")
+        log.log_error(full_trace, user.username, f"Полный трейс ошибки: {url}")
 
         # Отправка ошибки администратору
         try:
@@ -118,7 +118,7 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
                 )
 
             width, height = get_video_resolution(file_path)
-            asyncio.create_task(send_video(callback.bot, callback.message.chat.id, user.id, file_path, width, height))
+            asyncio.create_task(send_video(callback.bot, callback.message, callback.message.chat.id, user.id, file_path, width, height))
 
         elif format_type == "audio":
             if USE_PYTUBE:
@@ -132,7 +132,7 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
             if not file_path:
                 file_path = await yt_dlp_dl.download_audio(url, user.id)
 
-            asyncio.create_task(send_audio(callback.bot, callback.message.chat.id, file_path))
+            asyncio.create_task(send_audio(callback.bot, callback.message, callback.message.chat.id, file_path))
 
         else:
             return await callback.answer("Неизвестный формат.")

@@ -4,6 +4,8 @@ from aiogram.fsm.context import FSMContext
 from config import ADMINS
 from utils.redis import r, get_user_links
 from states.history import HistoryStates
+from datetime import datetime, timedelta
+
 
 router = Router()
 
@@ -56,10 +58,16 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
 
     # Получение информации о пользователе
     user_data = await r.hgetall(f"user:{user_id}")
-    if not user_data:
-        await message.answer("❌ Данные пользователя не найдены.")
-        await state.clear()
-        return
+    expire_timestamp = await r.get(f"subscriber:expire:{user_id}")
+    if expire_timestamp:
+        expire_timestamp = int(expire_timestamp)
+        expiry_date = datetime.fromtimestamp(expire_timestamp)
+        if expiry_date > datetime.now():
+            subscription_status = f"✅ Подписка активна до <b>{expiry_date.strftime('%d.%m.%Y %H:%M')}</b>"
+        else:
+            subscription_status = "❌ Подписка истекла"
+    else:
+        subscription_status = "❌ Подписка не активна"
 
     links = await get_user_links(user_id)
     name = user_data.get("first_name", "")
@@ -68,6 +76,7 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
     user_info = "<b>👤 Пользователь:</b>\n\n"
     user_info += f"ID: <code>{user_id}</code>\n"
     user_info += f"Имя: {name}\n"
+    user_info += f"{subscription_status}\n"
     if username:
         user_info += f"Username: @{username}\n"
 

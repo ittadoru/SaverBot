@@ -9,6 +9,9 @@ ADMIN_ERROR = int(os.getenv("ADMIN"))  # Админ для ошибок
 USE_PYTUBE = os.getenv("USE_PYTUBE", "False").lower() == "true"  # Использовать pytube
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")  # Подключение к Redis
 SUPPORT_GROUP_ID = int(os.getenv("SUPPORT_GROUP_ID"))  # ID группы поддержки
+SHOP_ID = int(os.getenv("SHOP_ID"))  # ID магазина
+API_KEY = os.getenv("API_KEY")  # API ключ для магазина
+DOMAIN = os.getenv("DOMAIN")
 
 DOWNLOAD_DIR = "downloads"  # Папка для загрузок
 if not os.path.exists(DOWNLOAD_DIR):

@@ -4,10 +4,10 @@ import os
 import uuid
 from config import DOWNLOAD_DIR
 from utils import logger as log
-
+from aiogram import types
 
 class InstagramDownloader(BaseDownloader):
-    async def download(self, url: str, message=None) -> str:
+    async def download(self, url: str, message: types.Message) -> str:
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
         log.log_download_start(url)  # Логируем начало загрузки
 
@@ -41,9 +41,9 @@ class InstagramDownloader(BaseDownloader):
                         ydl.download([url])
                     return  # Загрузка прошла успешно
                 except yt_dlp.utils.DownloadError as e:
-                    log.log_download_error(f"❌ Ошибка yt-dlp (попытка {attempt}/{max_attempts}): {e}")
+                    log.log_error(f"❌ Ошибка yt-dlp (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
                 except Exception as e:
-                    log.log_download_error(f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}")
+                    log.log_error(f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
 
                 if attempt < max_attempts:
                     time.sleep(5)  # Ждем перед повторной попыткой

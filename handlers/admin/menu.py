@@ -19,6 +19,7 @@ def get_admin_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="👥 Управление пользователями", callback_data="manage_users")],
         [InlineKeyboardButton(text="🎟 Промокоды", callback_data="promocode_menu")],
         [InlineKeyboardButton(text="📦 Экспорт логов", callback_data="export_logs")],
+        [InlineKeyboardButton(text="💳 Управление тарифами", callback_data="tariff_menu")],
         [
             InlineKeyboardButton(text="📨 Обычная рассылка", callback_data="broadcast_start"),
             InlineKeyboardButton(text="📰 Рекламная рассылка", callback_data="ad_broadcast_start")

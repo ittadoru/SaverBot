@@ -42,7 +42,7 @@ file_handler.setFormatter(file_formatter)
 
 # === Кастомный постфикс для файлов ===
 # Пример: bot_2025-08-02.log
-file_handler.namer = lambda name: name.replace("bot.log", f"bot_{datetime.now().date()}.log")
+file_handler.namer = lambda name: name.replace("bot.log.", "bot_") + ".log"
 
 # === Общий логгер ===
 logger = colorlog.getLogger("SaveBotLogger")
@@ -120,5 +120,9 @@ def log_error(error: Exception, username: str, context: str = ""):
     log_message(f"[ERROR] Произошла ошибка (@{username})", emoji="❌", log_level="error")
     if context:
         log_message(f"Контекст: {context}", level=1, log_level="error")
-    tb = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
+    if isinstance(error, BaseException):
+        tb = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
+    else:
+        tb = str(error)
+
     log_message(tb, level=1, log_level="error")
