@@ -1,8 +1,6 @@
-from aiogram.filters import CommandObject
-from aiogram import types, Router
 from aiogram.filters import Command
-from config import ADMINS
-from utils.redis import r, get_user_links
+from aiogram import types, Router
+from utils.redis import get_user_links
 
 router = Router()
 
@@ -12,12 +10,12 @@ async def show_my_history(message: types.Message):
     links = await get_user_links(user_id)
 
     if not links:
-        return await message.answer("ℹ️ У вас пока нет ссылок.")
+        await message.answer("ℹ️ У вас пока нет сохранённых ссылок.")
+        return
 
-    # Берем максимум 10 ссылок и нумеруем от 1
+    # Берём максимум 10 последних ссылок и нумеруем их
     text = "<b>🔗 Ваша история ссылок (последние 10):</b>\n\n"
-    for link in links[:10]:
-        text += f"<pre>{link}</pre>\n"
+    for i, link in enumerate(links[:10], start=1):
+        text += f"{i}. <pre>{link}</pre>\n"
 
     await message.answer(text, parse_mode="HTML")
-
