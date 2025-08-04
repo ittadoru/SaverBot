@@ -16,6 +16,7 @@ async def start_broadcast(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Broadcast.waiting_for_message)
     await callback.answer()
 
+
 @router.message(Broadcast.waiting_for_message)
 async def handle_broadcast(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
@@ -24,14 +25,14 @@ async def handle_broadcast(message: types.Message, state: FSMContext):
         return
     user_ids = await r.smembers("users")
     sent = 0
-    log.log_message(f"🚀 Начата рассылка: {message.text or '[не текстовое сообщение]'}", emoji="📢")
+    log.log_message(f"Начата рассылка: {message.text or '[не текстовое сообщение]'}", emoji="📢")
     for uid in user_ids:
         try:
             await message.send_copy(int(uid))
             sent += 1
         except Exception as e:
             log.log_error(f"Ошибка при отправке рассылки пользователю {uid}: {e}")
-    log.log_message(f"✅ Рассылка завершена. Отправлено {sent} пользователям.", emoji="📬")
+    log.log_message(f"Рассылка завершена. Отправлено {sent} пользователям.", emoji="📬")
     await message.answer(f"✅ Отправлено {sent} пользователям.")
     await state.clear()
 

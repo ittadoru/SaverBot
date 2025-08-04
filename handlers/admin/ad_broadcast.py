@@ -27,6 +27,7 @@ async def process_ad_broadcast(message: types.Message, state: FSMContext):
                 print(f"Ошибка отправки пользователю {uid}: {e}")
     try:
         await message.reply(f"Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам).")
+        log.log_message(f"Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам).", emoji="📢")
     except Exception as e:
         import traceback
         error_text = f"Ошибка: {e}"

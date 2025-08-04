@@ -7,6 +7,10 @@ async def create_ticket(redis, bot, user_id: int, username: str, group_id: int) 
     ticket_data = await redis.get(ticket_key)
     if ticket_data:
         ticket = json.loads(ticket_data)
+        # Если тикет закрыт, открываем его снова
+        if ticket["status"] != "open":
+            ticket["status"] = "open"
+            await redis.set(ticket_key, json.dumps(ticket))
         return ticket["topic_id"]
 
     topic_name = f"@{username} | {user_id}" if username else f"{user_id}"
