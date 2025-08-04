@@ -53,6 +53,10 @@ logger.propagate = False
 
 
 def log_message(message: str, level: int = 0, emoji: str = "", log_level: str = "info"):
+    """
+    Основная функция логирования с поддержкой отступов и эмодзи.
+    level — уровень вложенности для отступа, emoji — добавляет визуальный акцент.
+    """
     indent = " " * (level * 3)
     prefix = f"{emoji} " if emoji else ""
     full_message = f"{indent}{prefix}{message}"
@@ -68,46 +72,53 @@ def log_message(message: str, level: int = 0, emoji: str = "", log_level: str = 
 
 
 def log_receive(user_username: str, user_id: int):
+    """Логируем получение URL от пользователя"""
     log_message("[RECEIVE] Получен URL", emoji="🌐")
     log_message(f"От пользователя: @{user_username} (id={user_id})", level=1)
 
 
 def log_download_start(url: str):
+    """Логируем старт скачивания видео"""
     log_message("[DOWNLOAD] Старт загрузки с YouTube", emoji="⏬")
     log_message(f"URL: {url}", level=1)
 
 
 def log_download_complete(file_path: str):
+    """Логируем успешное завершение скачивания"""
     log_message("[DOWNLOAD] Видео скачано", emoji="✅")
     log_message(f"Файл: {file_path}", level=1)
 
 
 def log_send_start(chat_id: int):
+    """Логируем начало отправки видео в Telegram"""
     log_message("[SEND] Отправка в Telegram", emoji="✉️")
     log_message(f"Чат: {chat_id}", level=1)
 
 
 def log_send_complete():
+    """Логируем успешную отправку видео"""
     log_message("[SEND] Отправка завершена", emoji="✅")
 
 
 def log_user_sent(user_username: str, user_id: int):
+    """Логируем факт отправки видео конкретному пользователю"""
     log_message("[USER] Видео отправлено пользователю", emoji="👤")
     log_message(f"@{user_username} (id={user_id})", level=1)
 
 
 def log_cleanup_video(file_path: str):
+    """Логируем удаление видеофайла после отправки"""
     log_message("[CLEANUP] Видео удалено", emoji="🗑")
     log_message(f"Файл: {file_path}", level=1)
 
 
-
 def log_error(error: Exception, username: str, context: str = ""):
-    """Логирует исключение с полным трейсбеком"""
+    """
+    Логирует исключение с полным трассировкой (traceback).
+    Позволяет указать контекст ошибки и пользователя, при котором она произошла.
+    """
     log_message(f"[ERROR] Произошла ошибка (@{username})", emoji="❌", log_level="error")
     if context:
         log_message(f"Контекст: {context}", level=1, log_level="error")
     tb = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
     log_message(tb, level=1, log_level="error")
-
-

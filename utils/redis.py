@@ -1,43 +1,59 @@
+import json
+import re
+import time
 from datetime import date, timedelta
+
 import redis.asyncio as redis
 from aiogram import types, Bot
-from utils import logger as log
+
 from config import ADMINS, REDIS_URL
-from datetime import timedelta
-import re
-import json
+from utils import logger as log
 
-
+# Инициализация Redis клиента с автоматическим декодированием строк
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
+
 async def add_user(user: types.User, bot: Bot):
+    """
+    Добавляет пользователя в Redis, если он новый — уведомляет админов.
+    """
     is_new = not await r.sismember("users", user.id)
     await r.sadd("users", user.id)
-    await r.hset(f"user:{user.id}", mapping={
-        "first_name": user.first_name or "",
-        "username": user.username or ""
-    })
+    await r.hset(
+        f"user:{user.id}",
+        mapping={"first_name": user.first_name or "", "username": user.username or ""},
+    )
 
     if is_new:
-        log.log_message(f"🆕 Новый пользователь: {user.full_name} (@{user.username}) | id={user.id}", emoji="1️⃣")
+        log.log_message(
+            f"🆕 Новый пользователь: {user.full_name} (@{user.username}) | id={user.id}",
+            emoji="1️⃣",
+        )
         for admin_id in ADMINS:
             try:
-                text = f"""👤 Новый пользователь:\n\nИмя: {user.first_name}\n@{user.username or 'Без username'}\n<pre>ID: {user.id}</pre>"""
-                await bot.send_message(
-                    admin_id,
-                    text=text,
-                    parse_mode="HTML"
+                text = (
+                    f"👤 Новый пользователь:\n\n"
+                    f"Имя: {user.first_name}\n"
+                    f"@{user.username or 'Без username'}\n"
+                    f"<pre>ID: {user.id}</pre>"
                 )
+                await bot.send_message(admin_id, text=text, parse_mode="HTML")
             except Exception as e:
-                log.log_error(f"Не удалось отправить сообщение админу {admin_id}: {e}", user.username)
+                log.log_error(
+                    f"Не удалось отправить сообщение админу {admin_id}: {e}",
+                    user.username,
+                )
 
 
 async def get_top_downloaders_all_time(limit=5):
+    """
+    Получить топ пользователей по скачиваниям за всё время.
+    """
     keys = await r.keys("downloads:user:*")
     top = []
 
     for key in keys:
-        # Пропускаем ключи с датой (для 7-дневной статистики)
+        # Пропускаем ключи с датой (считаются отдельно для 7-дневной статистики)
         if re.match(r"downloads:user:\d{4}-\d{2}-\d{2}:\d+", key):
             continue
 
@@ -48,7 +64,11 @@ async def get_top_downloaders_all_time(limit=5):
     top.sort(key=lambda x: x[1], reverse=True)
     return top[:limit]
 
+
 async def get_top_downloaders_last_7_days(limit=5):
+    """
+    Получить топ пользователей по скачиваниям за последние 7 дней.
+    """
     today = date.today()
     counters = {}
 
@@ -66,7 +86,11 @@ async def get_top_downloaders_last_7_days(limit=5):
     sorted_users = sorted(counters.items(), key=lambda x: x[1], reverse=True)
     return sorted_users[:limit]
 
+
 async def increment_download(platform: str, user_id: int):
+    """
+    Увеличить счетчик скачиваний (общий, по платформе и пользователя).
+    """
     await r.incr("downloads:total")
     await r.incr(f"downloads:{platform}")
     await r.incr(f"user:{user_id}:downloads")
@@ -74,28 +98,43 @@ async def increment_download(platform: str, user_id: int):
     today_str = date.today().isoformat()
     key = f"downloads:user:{today_str}:{user_id}"
     await r.incr(key)
+    # Срок хранения — 8 дней (для еженедельной статистики)
     await r.expire(key, 8 * 24 * 60 * 60)
 
+
 async def log_user_activity(user_id: int):
+    """
+    Добавить пользователя в HyperLogLog активных пользователей за сегодня.
+    """
     today_key = f"active_users:{date.today()}"
     await r.pfadd(today_key, user_id)
+    # Держим статистику 7 дней
     await r.expire(today_key, 7 * 24 * 60 * 60)
 
 
 async def push_recent_link(user_id: int, url: str):
+    """
+    Сохранить последний URL пользователя (максимум 10).
+    """
     key = f"recent:links:{user_id}"
     await r.lpush(key, url)
-    await r.ltrim(key, 0, 9)  # только 10 последних для этого пользователя
+    await r.ltrim(key, 0, 9)  # сохраняем только 10 последних ссылок
+
 
 async def get_user_links(user_id: int) -> list[str]:
+    """
+    Получить последние ссылки пользователя.
+    """
     key = f"recent:links:{user_id}"
     return await r.lrange(key, 0, 9)
 
+
 # --- Подписчики ---
 
-# Добавить/продлить подписку на days дней
-import time
 async def add_subscriber_with_duration(user_id: int, days: int):
+    """
+    Добавить или продлить подписку пользователя на указанное количество дней.
+    """
     expire_key = f"subscriber:expire:{user_id}"
     now = int(time.time())
     current_expire = await r.get(expire_key)
@@ -106,26 +145,43 @@ async def add_subscriber_with_duration(user_id: int, days: int):
     await r.set(expire_key, new_expire)
     await r.sadd("subscribers", user_id)
 
+
 async def is_subscriber(user_id: int) -> bool:
+    """
+    Проверить, является ли пользователь подписчиком.
+    """
     return await r.sismember("subscribers", user_id)
 
+
 async def get_all_subscribers():
+    """
+    Получить всех подписчиков.
+    """
     return await r.smembers("subscribers")
 
-# --- Счётчик скачиваний за день ---
+
 async def increment_daily_download(user_id: int):
+    """
+    Увеличить счетчик скачиваний пользователя за сегодня.
+    """
     key = f"downloads:user:{date.today().isoformat()}:{user_id}"
     await r.incr(key)
+    # Храним 2 дня, чтобы избежать ранних удалений
     await r.expire(key, 2 * 24 * 60 * 60)
 
 
-# Получить количество скачиваний за день для пользователя
 async def get_daily_downloads(user_id: int):
+    """
+    Получить количество скачиваний пользователя за сегодня.
+    """
     key = f"downloads:user:{date.today().isoformat()}:{user_id}"
     return int(await r.get(key) or 0)
 
-# Получить количество скачиваний за неделю для пользователя
+
 async def get_weekly_downloads(user_id: int):
+    """
+    Получить количество скачиваний пользователя за последние 7 дней.
+    """
     today = date.today()
     total = 0
     for i in range(7):
@@ -136,8 +192,11 @@ async def get_weekly_downloads(user_id: int):
             total += int(count)
     return total
 
-# Получить статистику скачиваний за день для всех пользователей
+
 async def get_all_users_daily_stats():
+    """
+    Получить статистику скачиваний за сегодня для всех пользователей.
+    """
     today = date.today().isoformat()
     keys = await r.keys(f"downloads:user:{today}:*")
     stats = {}
@@ -146,8 +205,11 @@ async def get_all_users_daily_stats():
         stats[user_id] = int(await r.get(key) or 0)
     return stats
 
-# Получить статистику скачиваний за неделю для всех пользователей
+
 async def get_all_users_weekly_stats():
+    """
+    Получить статистику скачиваний за последние 7 дней для всех пользователей.
+    """
     today = date.today()
     stats = {}
     for i in range(7):
@@ -158,12 +220,21 @@ async def get_all_users_weekly_stats():
             stats[user_id] = stats.get(user_id, 0) + int(await r.get(key) or 0)
     return stats
 
+
 # --- Статистика по платформам ---
+
 async def increment_platform_download(user_id: int, platform: str):
+    """
+    Увеличить счетчик скачиваний по платформе для пользователя.
+    """
     key = f"downloads:user:{user_id}:platform:{platform}"
     await r.incr(key)
 
+
 async def get_platform_stats(user_id: int):
+    """
+    Получить статистику скачиваний по платформам для пользователя.
+    """
     keys = await r.keys(f"downloads:user:{user_id}:platform:*")
     stats = {}
     for key in keys:
@@ -172,8 +243,10 @@ async def get_platform_stats(user_id: int):
     return stats
 
 
-# usernames отдельно не хранятся, поиск реализован через user:{id} хеши
 async def get_user_id_by_username(username: str):
+    """
+    Найти user_id по username (регистр не важен).
+    """
     user_ids = await r.smembers("users")
     for uid in user_ids:
         data = await r.hgetall(f"user:{uid}")
@@ -181,98 +254,109 @@ async def get_user_id_by_username(username: str):
             return int(uid)
     return None
 
-# Автоматическое уведомление пользователю при превышении лимита
+
 async def notify_limit_exceeded(user_id: int, bot: Bot, limit: int):
+    """
+    Уведомить пользователя о превышении лимита скачиваний.
+    """
     try:
-        text = f"⚠️ Вы превысили лимит скачиваний ({limit} в сутки). Попробуйте завтра или оформите премиум!"
+        text = (
+            f"⚠️ Вы превысили лимит скачиваний ({limit} в сутки). "
+            "Попробуйте завтра или оформите премиум!"
+        )
         await bot.send_message(user_id, text)
     except Exception as e:
         log.log_error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
 
 
 # --- Промокоды ---
-# Добавить промокод (только админ)
+
 async def add_promocode(code: str, duration_days: int = 30):
-    # duration_days - срок действия подписки после активации
+    """
+    Добавить промокод с указанным сроком действия (в днях).
+    """
     await r.hset("promocodes", code, duration_days)
 
-# Удалить промокод (только админ)
+
 async def remove_promocode(code: str):
+    """
+    Удалить промокод.
+    """
     await r.hdel("promocodes", code)
 
-# Получить все промокоды
+
 async def get_all_promocodes():
+    """
+    Получить все промокоды.
+    """
     return await r.hgetall("promocodes")
 
 
-# Активация промокода пользователем с продлением подписки
-import time
 async def activate_promocode(user_id: int, code: str):
+    """
+    Активировать промокод для пользователя (удалить код из списка).
+    """
     duration = await r.hget("promocodes", code)
     if not duration:
-        return False  # промокод не найден
-    duration = int(duration)
-    expire_key = f"subscriber:expire:{user_id}"
-    now = int(time.time())
-    current_expire = await r.get(expire_key)
-    if current_expire and int(current_expire) > now:
-        # Продлеваем существующую подписку
-        new_expire = int(current_expire) + duration * 24 * 60 * 60
-    else:
-        # Новая подписка
-        new_expire = now + duration * 24 * 60 * 60
-    await r.set(expire_key, new_expire)
-    await r.sadd("subscribers", user_id)
-    await r.hdel("promocodes", code)  # промокод одноразовый
+        return None
+    await add_subscriber_with_duration(user_id, int(duration))
+    await remove_promocode(code)
+    return int(duration)
+
+
+# --- Поддержка (тикеты) ---
+
+async def create_ticket(user_id: int, username: str, message: str):
+    """
+    Создать новую тему поддержки с сообщением.
+    """
+    topic_key = f"support:topic:{user_id}"
+    topic = await r.get(topic_key)
+    if topic:
+        # Тикет уже существует
+        return False
+
+    data = {
+        "user_id": user_id,
+        "username": username,
+        "messages": [message],
+        "created_at": int(time.time()),
+    }
+    await r.set(topic_key, json.dumps(data))
     return True
 
-# Проверка и удаление подписчика по истечении срока
-async def check_and_remove_expired_subscriber(user_id: int):
-    expire_key = f"subscriber:expire:{user_id}"
-    now = int(time.time())
-    expire = await r.get(expire_key)
-    if expire and int(expire) <= now:
-        await r.srem("subscribers", user_id)
-        await r.delete(expire_key)
-        return True  # был удалён
-    return False  # ещё активен или не подписчик
+
+async def add_message_to_ticket(user_id: int, message: str):
+    """
+    Добавить сообщение в существующий тикет.
+    """
+    topic_key = f"support:topic:{user_id}"
+    topic_json = await r.get(topic_key)
+    if not topic_json:
+        return False
+
+    topic = json.loads(topic_json)
+    topic["messages"].append(message)
+    await r.set(topic_key, json.dumps(topic))
+    return True
 
 
+async def get_ticket_messages(user_id: int):
+    """
+    Получить все сообщения из тикета пользователя.
+    """
+    topic_key = f"support:topic:{user_id}"
+    topic_json = await r.get(topic_key)
+    if not topic_json:
+        return []
 
-SUPPORT_TICKET_PREFIX = "support_ticket:"
+    topic = json.loads(topic_json)
+    return topic.get("messages", [])
 
-async def create_support_ticket(user_id: int, username: str, topic_id: int):
-    ticket_key = f"{SUPPORT_TICKET_PREFIX}{user_id}"
-    ticket = {
-        "topic_id": topic_id,
-        "username": username,
-        "status": "open"
-    }
-    await r.set(ticket_key, json.dumps(ticket))
 
-async def get_support_ticket(user_id: int):
-    ticket_key = f"{SUPPORT_TICKET_PREFIX}{user_id}"
-    ticket_data = await r.get(ticket_key)
-    if ticket_data:
-        return json.loads(ticket_data)
-    return None
-
-async def close_support_ticket(user_id: int):
-    ticket = await get_support_ticket(user_id)
-    if ticket:
-        ticket["status"] = "closed"
-        await r.set(f"{SUPPORT_TICKET_PREFIX}{user_id}", json.dumps(ticket))
-
-async def is_support_ticket_open(user_id: int) -> bool:
-    ticket = await get_support_ticket(user_id)
-    return ticket and ticket["status"] == "open"
-
-async def get_user_id_by_topic_id(topic_id: int):
-    keys = await r.keys(f"{SUPPORT_TICKET_PREFIX}*")
-    for key in keys:
-        ticket_data = await r.get(key)
-        if ticket_data:
-            ticket = json.loads(ticket_data)
-            if ticket["topic_id"] == topic_id:
-                return int(key.split(":")[1])
-    return None
+async def close_ticket(user_id: int):
+    """
+    Закрыть и удалить тикет.
+    """
+    topic_key = f"support:topic:{user_id}"
+    await r.delete(topic_key)

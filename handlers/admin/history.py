@@ -50,24 +50,14 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
 
     # Если пользователь не найден
     if user_id is None:
-        keyboard = types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
-            ]
-        )
-        await message.answer("❌ Пользователь не найден.", reply_markup=keyboard)
+        await message.answer("❌ Пользователь не найден.")
         await state.clear()
         return
 
     # Получение информации о пользователе
     user_data = await r.hgetall(f"user:{user_id}")
     if not user_data:
-        keyboard = types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
-            ]
-        )
-        await message.answer("❌ Данные пользователя не найдены.", reply_markup=keyboard)
+        await message.answer("❌ Данные пользователя не найдены.")
         await state.clear()
         return
 
