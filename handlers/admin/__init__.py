@@ -1,5 +1,3 @@
-# handlers/admin/__init__.py
-
 from .menu import router as menu_router
 from .stats import router as stats_router
 from .users import router as users_router
