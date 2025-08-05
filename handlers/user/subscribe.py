@@ -8,14 +8,14 @@ from utils.redis import get_all_tariffs, get_tariff_by_id
 router = Router()
 
 @router.callback_query(lambda c: c.data == "subscribe")
-async def subscribe_handler(message: types.Message):
+async def subscribe_handler(callback: types.CallbackQuery):
     text = (
         "<b>💎 Преимущества подписки:</b>\n"
         "• Качество видео с YouTube до 720p (выбор разрешения)\n"
         "• Возможность скачать аудио из видео на Youtube\n"
         "• Без ограничений на скачивания\n"
         "• Более быстрые загрузки\n"
-        "• Долгое хранение файлов на сервере (1 час)\n"
+        "• Долгое хранение файлов на сервере\n"
         "• Приоритетная поддержка\n\n"
         "Выберите вариант подписки:"
     )
@@ -27,9 +27,12 @@ async def subscribe_handler(message: types.Message):
             text=f"{tariff.name} — {tariff.price} RUB",
             callback_data=f"buy_tariff:{tariff.id}"
         )] for tariff in tariffs
+    ] + [
+        [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
     ])
 
-    await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
 
 
 
@@ -63,36 +66,12 @@ async def payment_callback_handler(callback: types.CallbackQuery):
     )
 
     await callback.message.edit_text(
-        f"💳 Для оплаты тарифа <b>{tariff.name}</b> перейдите по ссылке:\n\n{payment_url}",
-        parse_mode="HTML"
+        f"💳 Для оплаты тарифа <b>{tariff.name}</b> нажмите на кнопку оплаты",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="💵 Оплатить", url=payment_url)],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="subscribe")]
+            ]
+        )
     )
-    await callback.answer()
-
-
-
-@router.callback_query(lambda c: c.data == "back_to_subscribe")
-async def back_to_subscribe_handler(callback: types.CallbackQuery):
-    # Отправляем заново выбор подписки
-    text = (
-        "<b>💎 Преимущества подписки:</b>\n"
-        "• Качество видео с YouTube до 720p (выбор разрешения)\n"
-        "• Возможность скачать аудио из видео на Youtube\n"
-        "• Без ограничений на скачивания\n"
-        "• Более быстрые загрузки\n"
-        "• Долгое хранение файлов на сервере (1 час)\n"
-        "• Приоритетная поддержка\n\n"
-        "Выберите вариант подписки:"
-    )
-    tariffs = await get_all_tariffs()
-    # Создаём список кнопок
-    buttons = [
-        [InlineKeyboardButton(text=f"{tariff.name} – {tariff.price} RUB", callback_data=f"buy_tariff:{tariff.id}")]
-        for tariff in tariffs
-    ]
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_menu")])
-
-    # Создаём клавиатуру
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()

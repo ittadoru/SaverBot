@@ -35,7 +35,7 @@ async def add_user(user: types.User, bot: Bot):
 
     if is_new:
         log.log_message(
-            f"🆕 Новый пользователь: {user.full_name} (@{user.username}) | id={user.id}",
+            f"Новый пользователь: {user.full_name} (@{user.username}) | id={user.id}",
             emoji="1️⃣",
         )
         for admin_id in ADMINS:

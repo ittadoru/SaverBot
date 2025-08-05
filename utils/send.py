@@ -35,9 +35,8 @@ async def send_video(
             text=f"📥 Ваша одноразовая ссылка для скачивания видео готово: {link}\n\n@savetokgrambot",
         )
 
-        # Удаляем файл через заданное время (3600 или 300 секунд)
         if await is_subscriber(user_id):
-            asyncio.create_task(remove_file_later(file_path, delay=3600, message=message))
+            asyncio.create_task(remove_file_later(file_path, delay=1800, message=message))
         else:
             asyncio.create_task(remove_file_later(file_path, delay=300, message=message))
 
