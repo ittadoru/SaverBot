@@ -41,7 +41,6 @@ async def create_ticket(redis, bot, user_id: int, username: str, group_id: int) 
 async def get_ticket(redis, user_id: int):
     """
     Получить данные тикета поддержки по user_id.
-
     """
     ticket_key = f"{SUPPORT_TICKET_PREFIX}{user_id}"
     ticket_data = await redis.get(ticket_key)
@@ -53,9 +52,6 @@ async def get_ticket(redis, user_id: int):
 async def close_ticket(redis, user_id: int):
     """
     Закрыть тикет поддержки пользователя.
-
-    :param redis: Экземпляр Redis клиента.
-    :param user_id: ID пользователя.
     """
     ticket = await get_ticket(redis, user_id)
     if ticket:
@@ -66,10 +62,6 @@ async def close_ticket(redis, user_id: int):
 async def is_ticket_open(redis, user_id: int) -> bool:
     """
     Проверить, открыт ли тикет поддержки для пользователя.
-
-    :param redis: Экземпляр Redis клиента.
-    :param user_id: ID пользователя.
-    :return: True, если тикет открыт, иначе False.
     """
     ticket = await get_ticket(redis, user_id)
     return ticket and ticket["status"] == "open"
@@ -78,10 +70,6 @@ async def is_ticket_open(redis, user_id: int) -> bool:
 async def get_user_id_by_topic(redis, topic_id: int):
     """
     Найти user_id по topic_id тикета.
-
-    :param redis: Экземпляр Redis клиента.
-    :param topic_id: ID темы форума.
-    :return: user_id или None, если не найден.
     """
     keys = await redis.keys(f"{SUPPORT_TICKET_PREFIX}*")
     for key in keys:

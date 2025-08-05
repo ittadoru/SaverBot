@@ -9,6 +9,10 @@ router = Router()
 
 @router.callback_query(lambda c: c.data == "subscribe")
 async def subscribe_handler(callback: types.CallbackQuery):
+    """
+    Обработчик нажатия кнопки "Подписка" в меню профиля.
+    """
+
     text = (
         "<b>💎 Преимущества подписки:</b>\n"
         "• Качество видео с YouTube до 720p (выбор разрешения)\n"
@@ -38,6 +42,10 @@ async def subscribe_handler(callback: types.CallbackQuery):
 
 @router.callback_query(lambda c: c.data and c.data.startswith("buy_tariff:"))
 async def payment_callback_handler(callback: types.CallbackQuery):
+    """
+    Обработка нажатия кнопки "Оплатить" для тарифа.
+    Создаёт платёж и отправляет ссылку на оплату.
+    """
     user_id = callback.from_user.id
     username = callback.from_user.username or ""
     
@@ -58,7 +66,7 @@ async def payment_callback_handler(callback: types.CallbackQuery):
         user_id=user_id,
         amount=tariff.price,
         description=f"Подписка: {tariff.name}",
-        bot_username="savetokgrambot",
+        bot_username=callback.message.from_user.username,
         metadata={
             "user_id": str(user_id),
             "tariff_id": str(tariff.id)

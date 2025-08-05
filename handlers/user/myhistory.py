@@ -7,6 +7,10 @@ router = Router()
 
 @router.callback_query(lambda c: c.data == "myhistory")
 async def show_my_history(callback: types.CallbackQuery):
+    """
+    Обработчик нажатия кнопки "Моя история" в меню профиля.
+    Показывает последние 10 сохранённых ссылок пользователя.
+    """
     user_id = callback.from_user.id
     links = await get_user_links(user_id)
 

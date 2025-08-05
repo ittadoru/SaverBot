@@ -1,4 +1,3 @@
-from aiogram.filters import StateFilter
 from aiogram.fsm.state import StatesGroup, State
 
 

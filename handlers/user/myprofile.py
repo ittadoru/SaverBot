@@ -2,7 +2,6 @@ from aiogram import Router, F, types
 from aiogram.types import CallbackQuery
 from datetime import datetime
 from utils.redis import r, get_platform_stats
-from .menu import keyboard
 
 
 router = Router()
@@ -50,5 +49,8 @@ async def show_profile(callback: CallbackQuery):
 
     full_text = user_info + stats_block
 
-    keyboard.inline_keyboard[-1].append(types.InlineKeyboardButton(text="💳 Купить подписку", callback_data="subscribe"))
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="💳 Купить подписку", callback_data="subscribe")],
+        [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
+    ])
     await callback.message.edit_text(full_text, parse_mode="HTML", reply_markup=keyboard)

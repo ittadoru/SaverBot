@@ -10,6 +10,9 @@ from aiogram import types
 
 class TikTokDownloader(BaseDownloader):
     async def download(self, url: str, message: types.Message) -> str:
+        """
+        Загрузка видео с TikTok с помощью yt-dlp.
+        """
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
         log.log_download_start(url)  # Логируем начало загрузки
 

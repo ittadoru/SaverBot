@@ -15,6 +15,10 @@ app = FastAPI()
 
 @app.post("/yookassa")
 async def yookassa_webhook(request: Request):
+    """
+    Обрабатывает вебхуки от YooKassa.
+    При успешной оплате начисляет дни подписки пользователю.
+    """
     bot: Bot = app.state.bot
     r = app.state.redis
 
@@ -26,26 +30,31 @@ async def yookassa_webhook(request: Request):
 
     log.log_message(f"Получен webhook: {data}", emoji="🔔")
 
-    # Пример проверки платежа (как в твоём aiohttp варианте)
+    # Корректная обработка webhook: начисляем дни по тарифу, а не по сумме оплаты
     try:
         payment_id = data["object"]["id"]
         payment_status = data["object"]["status"]
         amount_str = data["object"]["amount"]["value"]
         user_id_str = data["object"]["metadata"]["user_id"]
+        tariff_id_str = data["object"]["metadata"]["tariff_id"]
 
-        amount = int(float(amount_str))  # "49.00" -> 49.0 -> 49
-        user_id = int(user_id_str)       # "1204967278" -> 1204967278
+        user_id = int(user_id_str)
+        tariff_id = int(tariff_id_str)
     except (KeyError, ValueError) as e:
         log.log_message(f"Ошибка данных webhook: {e}", log_level="error", emoji="❌")
         raise HTTPException(status_code=400, detail="Invalid data")
 
     if payment_status == "succeeded":
-        # Продление подписки
-        days = amount  # если сумма равна количеству дней, как у тебя
+        try:
+            tariff = await redis.get_tariff_by_id(tariff_id)
+            days = tariff.duration_days
+        except Exception as e:
+            log.log_message(f"Ошибка получения тарифа: {e}", log_level="error", emoji="❌")
+            raise HTTPException(status_code=400, detail="Tariff error")
+
         await redis.add_subscriber_with_duration(user_id, days)
         log.log_message(f"Подписка продлена для user_id={user_id} на {days} дней", emoji="✅")
 
-        # Отправка сообщения пользователю
         try:
             await bot.send_message(
                 user_id,

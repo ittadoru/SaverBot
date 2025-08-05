@@ -56,7 +56,7 @@ async def _notify_user_and_show_keys(user_id: int, tariff, bot: Bot, request: we
             user_id,
             f"✅ Оплата прошла успешно! Ваш тариф '<b>{tariff.name}</b>' активирован на <b>{tariff.duration_days} дней</b>."
         )
-
+        
         fake_user = User(id=user_id, is_bot=False, first_name="N/A")
         fake_chat = Chat(id=user_id, type="private")
         fake_message = Message(message_id=0, date=datetime.now(), chat=fake_chat, from_user=fake_user)

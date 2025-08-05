@@ -1,5 +1,6 @@
 from aiogram.fsm.state import State, StatesGroup
 
+
 class PromoStates(StatesGroup):
     add = State()      # ожидание ввода промокода и срока
     remove = State()   # ожидание ввода промокода для удаления

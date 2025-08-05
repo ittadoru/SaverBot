@@ -11,7 +11,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")  # Подключен
 SUPPORT_GROUP_ID = int(os.getenv("SUPPORT_GROUP_ID"))  # ID группы поддержки
 SHOP_ID = int(os.getenv("SHOP_ID"))  # ID магазина
 API_KEY = os.getenv("API_KEY")  # API ключ для магазина
-DOMAIN = os.getenv("DOMAIN")
+DOMAIN = os.getenv("DOMAIN") # Домен
 
 DOWNLOAD_DIR = "downloads"  # Папка для загрузок
 if not os.path.exists(DOWNLOAD_DIR):
