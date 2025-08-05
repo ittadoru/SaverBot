@@ -1,10 +1,12 @@
 from aiogram import types, Router
 from aiogram.filters import Command
+from .menu import keyboard
+
 
 router = Router()
 
 @router.callback_query(lambda c: c.data == "more_info")
-async def about_handler(message: types.Message):
+async def about_handler(callback: types.CallbackQuery):
     """
     Обработчик команды /about.
     Отвечает пользователю информацией о функционале бота.
@@ -23,4 +25,5 @@ async def about_handler(message: types.Message):
         "Если у вас возникнут вопросы или предложения, не стесняйтесь использовать команду /help для связи с разработчиком."
     )
 
-    await message.answer(about_text)
+
+    await callback.message.edit_text(about_text, reply_markup=keyboard)

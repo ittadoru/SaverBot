@@ -86,7 +86,7 @@ def log_receive(user_username: str, user_id: int):
 
 def log_download_start(url: str):
     """Логируем старт скачивания видео"""
-    log_message("[DOWNLOAD] Старт загрузки с YouTube", emoji="⏬")
+    log_message("[DOWNLOAD] Старт загрузки", emoji="⏬")
     log_message(f"URL: {url}", level=1)
 
 

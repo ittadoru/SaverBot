@@ -3,6 +3,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from handlers.admin.history import HistoryStates
 from utils import logger as log
+from utils.platform_detect import detect_platform
 from utils.video_utils import get_video_resolution
 from utils.send import send_video, send_audio
 from services.youtube.pytube_downloader import PyTubeDownloader
@@ -26,11 +27,6 @@ router = Router()
 
 @router.message(F.text.regexp(r'https?://') & ~F.state.in_([HistoryStates.waiting_for_id_or_username]))
 async def download_handler(message: types.Message, state: FSMContext):
-    # Проверка лимита скачиваний за сегодня
-    daily_downloads = await get_daily_downloads(user.id)
-    if daily_downloads >= 20:
-        await message.answer("⚠️ Вы достигли лимита скачиваний на сегодня (20). Попробуйте завтра или оформите подписку!")
-        return
     """
     Обработчик сообщений с URL.  
     Если это YouTube и пользователь подписчик, предлагает выбор качества.  
@@ -40,7 +36,12 @@ async def download_handler(message: types.Message, state: FSMContext):
     user = message.from_user
     downloader = get_downloader(url)
 
-    platform = "youtube" if downloader.__class__.__name__ == "YTDLPDownloader" or downloader.__class__.__name__ == "PyTubeDownloader" else None
+    daily_downloads = await get_daily_downloads(user.id)
+    if daily_downloads >= 20 and not await is_subscriber(user.id):
+        await message.answer("⚠️ Вы достигли лимита скачиваний на сегодня (20). Попробуйте завтра или оформите подписку!")
+        return
+
+    platform = detect_platform(url)
     if platform == "youtube" and await is_subscriber(user.id):
         # Сохраняем ссылку в состоянии и предлагаем выбрать качество
         await state.update_data({f"yt_url_{user.id}": url})

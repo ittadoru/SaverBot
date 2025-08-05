@@ -222,7 +222,6 @@ async def get_all_tariffs() -> list[Tariff]:
     return tariffs
 
 
-
 async def increment_daily_download(user_id: int):
     """
     Увеличить счетчик скачиваний пользователя за сегодня.

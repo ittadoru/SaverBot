@@ -1,8 +1,9 @@
-
 from aiogram import Router, F, types
 from aiogram.types import CallbackQuery
 from datetime import datetime
 from utils.redis import r, get_platform_stats, get_user_links
+from .menu import keyboard
+
 
 router = Router()
 
@@ -46,19 +47,6 @@ async def show_profile(callback: CallbackQuery):
     else:
         stats_block = "\n\n<b>Статистика по платформам:</b>\nНет скачиваний."
 
-    # Последние 5 ссылок
-    links = await get_user_links(user_id)
-    if links:
-        links_text = "\n".join([f"<pre>{link}</pre>" for link in links[:5]])
-        links_block = f"\n\n<b>Последние 5 ссылок:</b>\n{links_text}"
-    else:
-        links_block = "\n\n<b>Последние 5 ссылок:</b>\nНет недавних ссылок."
 
-    keyboard = types.InlineKeyboardMarkup(
-        inline_keyboard=[
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
-        ]
-    )
-
-    full_text = user_info + stats_block + links_block
+    full_text = user_info + stats_block
     await callback.message.edit_text(full_text, parse_mode="HTML", reply_markup=keyboard)

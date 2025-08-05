@@ -8,11 +8,18 @@ router = Router()
 main_menu = InlineKeyboardMarkup(
     inline_keyboard = [
         [InlineKeyboardButton(text="Моя профиль", callback_data="myprofile")],
-        [InlineKeyboardButton(text="Помощь", callback_data="help"), InlineKeyboardButton(text="Подробнее", callback_data="more_info")],
-        [InlineKeyboardButton(text="Ввести промокод", callback_data="promocode"), InlineKeyboardButton(text="Моя история", callback_data="myhistory")]
+        [InlineKeyboardButton(text="Начать чат с поддержкой", callback_data="help")],
+        [InlineKeyboardButton(text="Ввести промокод", callback_data="promo")],
+        [InlineKeyboardButton(text="Подробнее", callback_data="more_info"), InlineKeyboardButton(text="Моя история", callback_data="myhistory")]
     ],
     resize_keyboard=True
 )
+keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
+        ]
+    )
+
 
 @router.message(F.text == "/profile")
 async def show_main_menu(message: Message):

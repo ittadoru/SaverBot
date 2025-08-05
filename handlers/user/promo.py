@@ -7,8 +7,8 @@ from states.promo import PromoStates
 router = Router()
 
 @router.callback_query(lambda c: c.data == "promo")
-async def promo_start(message: types.Message, state: FSMContext):
-    await message.answer("Пожалуйста, введите промокод для активации подписки:")
+async def promo_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer("Пожалуйста, введите промокод для активации подписки:")
     await state.set_state(PromoStates.user)
 
 @router.message(PromoStates.user)
