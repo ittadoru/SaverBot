@@ -11,7 +11,7 @@ from utils import logger as log
 router = Router()
 
 
-@router.message(Command("help"))
+@router.callback_query(lambda c: c.data == "help")
 async def start_support(message: Message, state: FSMContext):
     """
     Обрабатывает команду /help от пользователя.
@@ -27,7 +27,7 @@ async def start_support(message: Message, state: FSMContext):
     else:
         topic_id = await create_ticket(redis, message.bot, user_id, username, SUPPORT_GROUP_ID)
         log.log_message(
-            f"🆕 Открыт чат поддержки для @{username or 'Без username'} | id={user_id}",
+            f"Открыт чат поддержки для @{username or 'Без username'} | id={user_id}",
             emoji="💬"
         )
 
@@ -57,7 +57,7 @@ async def stop_support(message: Message, state: FSMContext):
     if ticket and ticket["status"] == "open":
         await close_ticket(redis, user_id)
         log.log_message(
-            f"❌ Пользователь @{username or 'Без username'} | id={user_id} закрыл чат поддержки",
+            f"Пользователь @{username or 'Без username'} | id={user_id} закрыл чат поддержки",
             emoji="🔒"
         )
         await message.answer("Диалог с поддержкой завершён. Бот снова доступен для скачивания видео.")
@@ -106,7 +106,7 @@ async def forward_to_support(message: Message, state: FSMContext):
         )
 
     log.log_message(
-        f"✉️ Пользователь @{username or 'Без username'} | id={user_id} отправил сообщение в поддержку: "
+        f"Пользователь @{username or 'Без username'} | id={user_id} отправил сообщение в поддержку: "
         f"{message.text or '[не текстовое сообщение]'}",
         emoji="📩"
     )

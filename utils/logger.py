@@ -2,7 +2,6 @@ import logging
 import traceback
 import colorlog
 import os
-from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 
 # Создаем папку logs, если ее нет
@@ -23,7 +22,9 @@ console_formatter = colorlog.ColoredFormatter(
 )
 console_handler.setFormatter(console_formatter)
 
+
 # === Ротация файла раз в сутки ===
+# Текущий день всегда пишет в logs/bot.log, при ротации файл переименовывается в logs/bot_YYYY-MM-DD.log
 file_handler = TimedRotatingFileHandler(
     filename="logs/bot.log",
     when="midnight",
@@ -40,9 +41,15 @@ file_formatter = logging.Formatter(
 )
 file_handler.setFormatter(file_formatter)
 
-# === Кастомный постфикс для файлов ===
-# Пример: bot_2025-08-02.log
-file_handler.namer = lambda name: name.replace("bot.log.", "bot_") + ".log"
+# === Кастомный постфикс для архивных файлов ===
+def custom_rotator(source, dest):
+    # dest по умолчанию logs/bot.log.YYYY-MM-DD
+    dirname, basename = os.path.split(dest)
+    date_part = basename.replace("bot.log.", "")
+    new_name = os.path.join(dirname, f"bot_{date_part}.log")
+    os.rename(source, new_name)
+
+file_handler.rotator = custom_rotator
 
 # === Общий логгер ===
 logger = colorlog.getLogger("SaveBotLogger")

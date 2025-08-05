@@ -2,7 +2,6 @@ from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from handlers.admin.history import HistoryStates
-from utils.redis import is_subscriber, log_user_activity, push_recent_link, increment_download
 from utils import logger as log
 from utils.video_utils import get_video_resolution
 from utils.send import send_video, send_audio
@@ -11,12 +10,27 @@ from services.youtube.yt_dlp_downloader import YTDLPDownloader
 from services import get_downloader
 from config import USE_PYTUBE, ADMIN_ERROR
 import asyncio
+from utils.redis import (
+    increment_daily_download, 
+    increment_platform_download, 
+    is_subscriber, 
+    log_user_activity, 
+    push_recent_link, 
+    increment_download, 
+    get_daily_downloads
+    )
+
 
 router = Router()
 
 
 @router.message(F.text.regexp(r'https?://') & ~F.state.in_([HistoryStates.waiting_for_id_or_username]))
 async def download_handler(message: types.Message, state: FSMContext):
+    # Проверка лимита скачиваний за сегодня
+    daily_downloads = await get_daily_downloads(user.id)
+    if daily_downloads >= 20:
+        await message.answer("⚠️ Вы достигли лимита скачиваний на сегодня (20). Попробуйте завтра или оформите подписку!")
+        return
     """
     Обработчик сообщений с URL.  
     Если это YouTube и пользователь подписчик, предлагает выбор качества.  
@@ -54,6 +68,8 @@ async def download_handler(message: types.Message, state: FSMContext):
         await log_user_activity(user.id)
         await push_recent_link(user.id, url)
         await increment_download(platform, user_id=user.id)
+        await increment_platform_download(user.id, platform)
+        await increment_daily_download(user_id=user.id)
 
     except Exception as e:
         import traceback

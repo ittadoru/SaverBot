@@ -2,17 +2,14 @@ from .base import BaseDownloader
 import yt_dlp
 import os
 import uuid
-from config import DOWNLOAD_DIR
-from utils import logger as log
+from config import DOWNLOAD_DIR, ADMIN_ERROR
+from utils import yt_dlp_logger as yt, logger as log
 from aiogram import types
 
 class InstagramDownloader(BaseDownloader):
     async def download(self, url: str, message: types.Message) -> str:
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
         log.log_download_start(url)  # Логируем начало загрузки
-
-        from utils import yt_dlp_logger as yt
-        from config import ADMIN_ERROR
 
         ydl_opts = {
             'format': 'mp4',

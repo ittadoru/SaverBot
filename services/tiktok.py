@@ -3,7 +3,7 @@ import yt_dlp
 import os
 import uuid
 from config import DOWNLOAD_DIR, ADMIN_ERROR
-from utils import logger as log
+from utils import yt_dlp_logger as yt, logger as log
 import asyncio
 import time
 from aiogram import types
@@ -13,7 +13,6 @@ class TikTokDownloader(BaseDownloader):
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
         log.log_download_start(url)  # Логируем начало загрузки
 
-        from utils import yt_dlp_logger as yt
 
         ydl_opts = {
             'format': 'mp4',

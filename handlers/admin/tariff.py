@@ -77,7 +77,7 @@ async def process_tariff_price(message: Message, state: FSMContext):
     name = data["name"]
     days = data["days"]
 
-    await create_tariff(name=name, duration_days=days, price=price)
+    await create_tariff(name=name, price=price, duration_days=days)
     logging.info(f"Admin {message.from_user.id} created tariff '{name}' ({days} days, {price} RUB)")
 
     await message.answer(f"✅ Тариф «{name}» добавлен: {days} дней, {price} RUB.")

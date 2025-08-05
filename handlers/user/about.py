@@ -3,7 +3,7 @@ from aiogram.filters import Command
 
 router = Router()
 
-@router.message(Command("about"))
+@router.callback_query(lambda c: c.data == "more_info")
 async def about_handler(message: types.Message):
     """
     Обработчик команды /about.

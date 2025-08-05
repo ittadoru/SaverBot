@@ -4,7 +4,7 @@ from utils.redis import get_user_links
 
 router = Router()
 
-@router.message(Command("myhistory"))
+@router.callback_query(lambda c: c.data == "myhistory")
 async def show_my_history(message: types.Message):
     user_id = message.from_user.id
     links = await get_user_links(user_id)

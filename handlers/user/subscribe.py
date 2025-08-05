@@ -7,7 +7,7 @@ from utils.redis import get_all_tariffs, get_tariff_by_id
 
 router = Router()
 
-@router.message(Command("subscribe"))
+@router.callback_query(lambda c: c.data == "subscribe")
 async def subscribe_handler(message: types.Message):
     text = (
         "<b>💎 Преимущества подписки:</b>\n"
