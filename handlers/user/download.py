@@ -121,7 +121,7 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
                     "720": 'bestvideo[ext=mp4][vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]',
                 }
                 file_path = await yt_dlp_dl.download(
-                    url, user.id, callback.message, custom_format=res_map_dl.get(res, res_map_dl["480"]), message=callback.message
+                    url, user.id, callback.message, custom_format=res_map_dl.get(res, res_map_dl["480"])
                 )
 
             width, height = get_video_resolution(file_path)
