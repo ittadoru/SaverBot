@@ -1,7 +1,7 @@
 from aiogram import types, Router
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import ADMINS
-from utils.redis import r
+from redis_db import r
 
 router = Router()
 

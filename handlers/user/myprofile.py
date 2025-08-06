@@ -1,7 +1,8 @@
 from aiogram import Router, types
 from aiogram.types import CallbackQuery
 from datetime import datetime
-from utils.redis import r, get_platform_stats
+from redis_db.platforms import get_platform_stats
+from redis_db import r
 
 
 router = Router()

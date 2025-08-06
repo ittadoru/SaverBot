@@ -2,7 +2,8 @@ from aiogram import Router, types
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
-from utils import redis, logger as log
+from redis_db.subscribers import get_all_promocodes, remove_promocode, add_promocode
+from utils import logger as log
 from config import ADMINS
 from states.promo import PromoStates
 
@@ -31,7 +32,7 @@ async def process_add_promocode(message: types.Message, state: FSMContext):
         parts = message.text.strip().split()
         if len(parts) == 2 and parts[1].isdigit():
             code, days = parts[0], int(parts[1])
-            await redis.add_promocode(code, days)
+            await add_promocode(code, days)
             log.log_message(
                 f"Добавлен промокод: {code} на {days} дней админом "
                 f"{message.from_user.username} ({message.from_user.id})",
@@ -64,10 +65,10 @@ async def process_remove_promocode(message: types.Message, state: FSMContext):
         return
 
     code = message.text.strip()
-    promocodes = await redis.get_all_promocodes()
+    promocodes = await get_all_promocodes()
 
     if code in promocodes:
-        await redis.remove_promocode(code)
+        await remove_promocode(code)
         log.log_message(
             f"Удалён промокод: {code} админом "
             f"{message.from_user.username} ({message.from_user.id})",
@@ -84,7 +85,7 @@ async def process_remove_promocode(message: types.Message, state: FSMContext):
 # Обработка нажатия кнопки "Все промокоды"
 @router.callback_query(lambda c: c.data == "all_promocodes")
 async def show_all_promocodes(callback: CallbackQuery):
-    promocodes = await redis.get_all_promocodes()
+    promocodes = await get_all_promocodes()
 
     if promocodes:
         text = "<b>Все промокоды:</b>\n" + "\n".join(

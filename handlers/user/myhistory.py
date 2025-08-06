@@ -1,5 +1,5 @@
 from aiogram import types, Router
-from utils.redis import get_user_links
+from redis_db.users import get_user_links
 from .menu import keyboard
 
 router = Router()

@@ -2,20 +2,17 @@ from aiohttp import web
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
-from datetime import datetime
-import utils.payment as payment
-from utils import redis
+import payment
+from redis_db.subscribers import add_subscriber_with_duration
+from redis_db.tariff import get_tariff_by_id
 from utils import logger as log  # твоя функция логирования
-
-from aiogram.types import User, Chat, Message
-
 
 async def _handle_user_payment(user_id: int, tariff):
     """
     Продлевает подписку пользователя в Redis.
     """
     subscription_days = tariff.duration_days
-    await redis.add_subscriber_with_duration(user_id, subscription_days)
+    await add_subscriber_with_duration(user_id, subscription_days)
     log.log_message(
         f"Подписка пользователя {user_id} продлена на {subscription_days} дней.",
         emoji="🔄", log_level="info"
@@ -50,27 +47,6 @@ async def _notify_user_and_show_keys(user_id: int, tariff, bot: Bot, request: we
             f"Не удалось очистить состояние или отредактировать сообщение оплаты для пользователя {user_id}: {e}",
             emoji="❌", log_level="error"
         )
-
-    try:
-        await bot.send_message(
-            user_id,
-            f"✅ Оплата прошла успешно! Ваш тариф '<b>{tariff.name}</b>' активирован на <b>{tariff.duration_days} дней</b>."
-        )
-        
-        fake_user = User(id=user_id, is_bot=False, first_name="N/A")
-        fake_chat = Chat(id=user_id, type="private")
-        fake_message = Message(message_id=0, date=datetime.now(), chat=fake_chat, from_user=fake_user)
-
-        # Твой show_profile_logic нужно импортировать или заменить вызов
-        # Пример вызова (если есть функция show_profile_logic):
-        # await show_profile_logic(fake_message, bot)
-
-    except Exception as e:
-        log.log_message(
-            f"Не удалось отправить уведомление об успешной оплате пользователю {user_id}: {e}",
-            emoji="❌", log_level="error"
-        )
-
 
 async def _log_transaction(bot: Bot, user_id: int, tariff_name: str, tariff_price: float, support_chat_id: int):
     """
@@ -113,7 +89,7 @@ async def yookassa_webhook_handler(request: web.Request):
         metadata = notification.object.metadata
         user_id = int(metadata['user_id'])
         tariff_id = int(metadata['tariff_id'])
-        tariff = await redis.get_tariff_by_id(tariff_id)
+        tariff = await get_tariff_by_id(tariff_id)
         log.log_message(f"Получен webhook от пользователя {user_id} с тарифом {tariff_id}.", emoji="🔔", log_level="error")
         if not tariff:
             log.log_message(f"Webhook с несуществующим tariff_id: {tariff_id}", emoji="⚠️", log_level="warning")

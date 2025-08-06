@@ -4,7 +4,8 @@ from aiogram.fsm.context import FSMContext
 
 from config import ADMIN_ERROR
 from states.ad_broadcast import AdBroadcastStates
-from utils import redis
+import redis_db as redis
+from redis_db.subscribers import get_all_subscribers
 from utils import logger as log
 
 import traceback
@@ -23,7 +24,7 @@ async def ad_broadcast_start(callback: CallbackQuery, state: FSMContext):
 async def process_ad_broadcast(message: Message, state: FSMContext):
     """Отправка рекламной рассылки всем пользователям, кроме подписчиков."""
     user_ids = await redis.r.smembers("users")
-    subscribers = await redis.get_all_subscribers()
+    subscribers = await get_all_subscribers()
     count_sent = 0
 
     for uid in user_ids:

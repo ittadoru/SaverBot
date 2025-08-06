@@ -3,7 +3,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
 from states.broadcast import Broadcast
-from utils.redis import r
+from redis_db import r
 from config import ADMINS
 from utils import logger as log
 

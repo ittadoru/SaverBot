@@ -7,7 +7,7 @@ from aiogram import types
 
 from utils import logger as log
 from utils import yt_dlp_logger as yt
-from utils.redis import is_subscriber
+from redis_db.subscribers import is_subscriber
 from ..base import BaseDownloader
 from config import DOWNLOAD_DIR, ADMIN_ERROR
 

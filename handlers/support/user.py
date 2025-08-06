@@ -2,7 +2,7 @@ from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.filters import Command
-from utils.redis import r as redis
+from redis_db import r as redis
 from config import SUPPORT_GROUP_ID
 from states.support import Support
 from utils.support_ticket import create_ticket, get_ticket, close_ticket

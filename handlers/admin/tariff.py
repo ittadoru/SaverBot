@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from states.tariff import TariffStates
-from utils.redis import create_tariff, delete_tariff, get_all_tariffs
+from redis_db.tariff import create_tariff, delete_tariff, get_all_tariffs
 from config import ADMINS
 import logging
 

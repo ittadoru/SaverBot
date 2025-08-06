@@ -7,8 +7,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from aiogram import types, Bot
 
-from utils import redis, logger as log
-from config import ADMIN_ERROR, BOT_TOKEN
+from redis_db import r
+from redis_db.subscribers import add_subscriber_with_duration
+from redis_db.tariff import get_tariff_by_id
+from utils import logger as log
+from config import ADMIN_ERROR, BOT_TOKEN, SUPPORT_GROUP_ID, SUBSCRIBE_TOPIC_ID
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
@@ -56,19 +59,48 @@ async def yookassa_webhook(request: Request):
 
     if payment_status == "succeeded":
         try:
-            tariff = await redis.get_tariff_by_id(tariff_id)
+            tariff = await get_tariff_by_id(tariff_id)
             days = tariff.duration_days
         except Exception as e:
             log.log_message(f"Ошибка получения тарифа: {e}", log_level="error", emoji="❌")
             raise HTTPException(status_code=400, detail="Tariff error")
 
-        await redis.add_subscriber_with_duration(user_id, days)
+        await add_subscriber_with_duration(user_id, days)
         log.log_message(f"Подписка продлена для user_id={user_id} на {days} дней", emoji="✅")
 
         try:
+            # Получаем данные пользователя
+            user = await bot.get_chat(user_id)
+            username = f"@{user.username}" if user.username else "—"
+            full_name = user.full_name or user.first_name or "—"
+            # Дата окончания подписки
+            from datetime import datetime, timedelta
+            expire_date = datetime.now() + timedelta(days=days)
+            expire_str = expire_date.strftime('%d.%m.%Y')
+
+            # Сообщение пользователю
             await bot.send_message(
                 user_id,
-                f"✅ Ваша подписка успешно оформлена и продлена на {days} дней!"
+                f"✅ Ваша подписка успешно оформлена и продлена на <b>{days} дней</b>!\n\n"
+                f"🏷️ Тариф: <b>{tariff.name}</b>\n"
+                f"📅 Действует до: <b>{expire_str}</b>"
+                , parse_mode="HTML"
+            )
+            log.log_message(
+                f"Уведомление об успешной оплате отправлено пользователю {user_id}.",
+                emoji="📩", log_level="info"
+            )
+            # Красивое уведомление в группу
+            await bot.send_message(
+                SUPPORT_GROUP_ID,
+                f"<b>💳 Новая оплата подписки!</b>\n\n"
+                f"👤 <b>Пользователь:</b> {full_name} ({username})\n"
+                f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
+                f"🏷️ <b>Тариф:</b> <b>{tariff.name}</b>\n"
+                f"⏳ <b>Дней:</b> <b>{days}</b>\n"
+                f"📅 <b>Действует до:</b> <b>{expire_str}</b>\n",
+                parse_mode="HTML",
+                message_thread_id=SUBSCRIBE_TOPIC_ID
             )
         except Exception as e:
             log.log_message(f"Ошибка отправки сообщения пользователю: {e}", log_level="error", emoji="⚠️")
@@ -134,4 +166,4 @@ async def on_startup():
     """
     log.log_message("Запуск FastAPI приложения", emoji="🚀")
     app.state.bot = Bot(token=BOT_TOKEN)
-    app.state.redis = redis
+    app.state.redis = r

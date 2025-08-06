@@ -5,7 +5,7 @@ import datetime
 
 from utils import logger as log
 from config import ADMIN_ERROR
-from utils.redis import r
+from redis_db import r
 
 router = Router()
 

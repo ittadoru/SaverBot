@@ -2,9 +2,10 @@ from aiogram import types, Router
 from aiogram.fsm.context import FSMContext
 
 from config import ADMINS
-from utils.redis import r, get_user_links
+from redis_db import r
+from redis_db.users import get_user_links
 from states.history import HistoryStates
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 router = Router()

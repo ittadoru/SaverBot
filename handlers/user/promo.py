@@ -1,6 +1,8 @@
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
-from utils import redis, logger as log
+from redis_db.subscribers import activate_promocode
+from redis_db import r
+from utils import logger as log
 from states.promo import PromoStates
 
 router = Router()
@@ -13,8 +15,8 @@ async def promo_start(callback: types.CallbackQuery, state: FSMContext):
 @router.message(PromoStates.user)
 async def process_user_promocode(message: types.Message, state: FSMContext):
     code = message.text.strip()
-    duration = await redis.r.hget("promocodes", code)
-    result = await redis.activate_promocode(message.from_user.id, code)
+    duration = await r.hget("promocodes", code)
+    result = await activate_promocode(message.from_user.id, code)
     
     if result and duration:
         log.log_message(

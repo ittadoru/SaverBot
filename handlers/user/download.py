@@ -11,15 +11,10 @@ from services.youtube.yt_dlp_downloader import YTDLPDownloader
 from services import get_downloader
 from config import USE_PYTUBE, ADMIN_ERROR
 import asyncio
-from utils.redis import (
-    increment_daily_download, 
-    increment_platform_download, 
-    is_subscriber, 
-    log_user_activity, 
-    push_recent_link, 
-    increment_download, 
-    get_daily_downloads
-    )
+from redis_db.download import increment_daily_download, increment_download, get_daily_downloads
+from redis_db.subscribers import is_subscriber
+from redis_db.platforms import increment_platform_download
+from redis_db.users import log_user_activity, push_recent_link
 
 
 router = Router()

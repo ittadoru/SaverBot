@@ -1,6 +1,6 @@
 from aiogram import Router, F, types
 from aiogram.types import Message
-from utils.redis import r as redis
+from redis_db import r as redis
 from config import SUPPORT_GROUP_ID
 from utils.support_ticket import get_user_id_by_topic, get_ticket, close_ticket
 from utils import logger as log

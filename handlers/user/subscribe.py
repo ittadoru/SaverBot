@@ -1,7 +1,7 @@
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.payment import create_payment
-from utils.redis import get_all_tariffs, get_tariff_by_id
+from redis_db.tariff import get_all_tariffs, get_tariff_by_id
 
 
 router = Router()

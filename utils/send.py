@@ -5,9 +5,8 @@ from aiogram import Bot, types
 from aiogram.types import FSInputFile
 
 from utils import logger as log
-from utils.redis import is_subscriber
+from redis_db.subscribers import is_subscriber
 from server import remove_file_later
-from fastapi import HTTPException
 
 from config import DOMAIN
 
