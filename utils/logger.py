@@ -119,12 +119,12 @@ def log_cleanup_video(file_path: str):
     log_message(f"Файл: {file_path}", level=1)
 
 
-def log_error(error: Exception, username: str, context: str = ""):
+def log_error(error: Exception, username: str = "", context: str = ""):
     """
     Логирует исключение с полным трассировкой (traceback).
     Позволяет указать контекст ошибки и пользователя, при котором она произошла.
     """
-    log_message(f"[ERROR] Произошла ошибка (@{username})", emoji="❌", log_level="error")
+    log_message(f"[ERROR] Произошла ошибка (@{username if username else "Без юзернейм"})", emoji="❌", log_level="error")
     if context:
         log_message(f"Контекст: {context}", level=1, log_level="error")
     if isinstance(error, BaseException):

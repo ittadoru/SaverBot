@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from redis import r
+from redis_db import r
 from aiogram import types, Bot
 from config import ADMINS
 from utils import logger as log

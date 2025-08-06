@@ -1,6 +1,6 @@
 import json
 import time
-from redis import r
+from redis_db import r
 from utils import logger as log
 
 
@@ -21,6 +21,7 @@ async def create_ticket(user_id: int, username: str, message: str):
         "created_at": int(time.time()),
     }
     await r.set(topic_key, json.dumps(data))
+    log.log_message(f"Создан новый тикет для пользователя {username} (ID: {user_id})", emoji="🎟")
     return True
 
 async def add_message_to_ticket(user_id: int, message: str):
@@ -35,6 +36,8 @@ async def add_message_to_ticket(user_id: int, message: str):
     topic = json.loads(topic_json)
     topic["messages"].append(message)
     await r.set(topic_key, json.dumps(topic))
+    log.log_message(f"Сообщение от пользователя {user_id} с содержанием:", emoji="✉️")
+    log.log_message(message, level=1)
     return True
 
 async def get_ticket_messages(user_id: int):
@@ -55,3 +58,4 @@ async def close_ticket(user_id: int):
     """
     topic_key = f"support:topic:{user_id}"
     await r.delete(topic_key)
+    log.log_message(f"Закрыт тикет пользователя {user_id}", emoji="🔒")

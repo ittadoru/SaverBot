@@ -2,7 +2,7 @@ import re
 from datetime import date, timedelta
 from aiogram import Bot
 from utils import logger as log
-from redis import r
+from redis_db import r
 
 async def get_top_downloaders_all_time(limit=5):
     """
@@ -97,6 +97,7 @@ async def notify_limit_exceeded(user_id: int, bot: Bot, limit: int):
             f"⚠️ Вы превысили лимит скачиваний ({limit} в сутки). "
             "Попробуйте завтра или оформите премиум!"
         )
+        log.log_message(f"Пользователь {user_id} превысил лимит скачиваний: {limit}", emoji="🚫")
         await bot.send_message(user_id, text)
     except Exception as e:
         log.log_error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")

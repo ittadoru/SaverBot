@@ -1,5 +1,5 @@
 from utils import logger as log
-from redis import r, Tariff
+from redis_db import r, Tariff
 
 
 async def create_tariff(name: str, price: int, duration_days: int):
@@ -18,12 +18,14 @@ async def create_tariff(name: str, price: int, duration_days: int):
         "duration_days": duration_days
     })
     await r.sadd("tariffs", new_id)
+    log.log_message(f"Создан новый тариф: {name} по цене {price} на {duration_days} дней", emoji="💰")
     return new_id
 
 async def delete_tariff(tariff_id: int):
     key = f"tariff:{tariff_id}"
     await r.delete(key)
     await r.srem("tariffs", tariff_id)
+    log.log_message(f"Удалён тариф с ID {tariff_id}", emoji="🗑️")
 
 # Получение тарифа по ID
 async def get_tariff_by_id(tariff_id: int) -> Tariff | None:

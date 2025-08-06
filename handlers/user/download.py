@@ -115,12 +115,7 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
             res = format_type.split('_')[1]
 
             if USE_PYTUBE:
-                try:
-                    log.log_message(f"Попытка скачать видео через pytube: {url}, качество {res}p")
-                    file_path = await pytube_dl.download(url, resolution=res)
-                    log.log_message(f"Видео скачано через pytube: {file_path}")
-                except Exception as e:
-                    log.log_error(e, user.username, f"Ошибка pytube, fallback на yt-dlp: {url}")
+                file_path = await pytube_dl.download(url, resolution=res)
 
             if not file_path:
                 # Форматы для yt-dlp с ограничением разрешения
@@ -139,12 +134,7 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
 
         elif format_type == "audio":
             if USE_PYTUBE:
-                try:
-                    log.log_message(f"Попытка скачать аудио через pytube: {url}")
-                    file_path = await pytube_dl.download_audio(url)
-                    log.log_message(f"Аудио скачано через pytube: {file_path}")
-                except Exception as e:
-                    log.log_error(e, user.username, f"Ошибка pytube, fallback на yt-dlp: {url}")
+                file_path = await pytube_dl.download_audio(url)
 
             if not file_path:
                 file_path = await yt_dlp_dl.download_audio(url, user.id)

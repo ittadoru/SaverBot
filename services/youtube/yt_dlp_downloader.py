@@ -124,12 +124,12 @@ class YTDLPDownloader(BaseDownloader):
                         ydl.download([url])
                     return
                 except yt_dlp.utils.DownloadError as e:
-                    log.log_download_error(
-                        f"❌ У библиотеки ошибка (попытка {attempt}/{max_attempts}): {e}"
+                    log.log_message(
+                        f"❌ У библиотеки ошибка (попытка {attempt}/{max_attempts}): {e}", log_level="error"
                     )
                 except Exception as e:
-                    log.log_download_error(
-                        f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}"
+                    log.log_message(
+                        f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}", log_level="error"
                     )
                 if attempt < max_attempts:
                     time.sleep(5)

@@ -46,7 +46,6 @@ async def payment_callback_handler(callback: types.CallbackQuery):
     Создаёт платёж и отправляет ссылку на оплату.
     """
     user_id = callback.from_user.id
-    username = callback.from_user.username or ""
     
     try:
         tariff_id = int(callback.data.split(":")[1])

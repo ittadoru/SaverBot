@@ -1,5 +1,5 @@
 import time
-from redis import r
+from redis_db import r
 from utils import logger as log
 
 async def add_subscriber_with_duration(user_id: int, days: int):
@@ -15,6 +15,7 @@ async def add_subscriber_with_duration(user_id: int, days: int):
         new_expire = now + days * 24 * 60 * 60
     await r.set(expire_key, new_expire)
     await r.sadd("subscribers", user_id)
+    log.log_message(f"Пользователь {user_id} подписался на {days} дней", emoji="✅")
 
 async def is_subscriber(user_id: int) -> bool:
     """
@@ -56,3 +57,4 @@ async def activate_promocode(user_id: int, code: str):
     await add_subscriber_with_duration(user_id, int(duration))
     await remove_promocode(code)
     return int(duration)
+    log.log_message(f"Промокод {code} активирован для пользователя {user_id}", emoji="🎉")

@@ -2,7 +2,7 @@ import os
 import uuid
 from pytube import YouTube
 from config import DOWNLOAD_DIR
-
+from utils import logger as log
 
 class PyTubeDownloader:
     async def download(self, url: str, resolution: str = "480") -> str:
@@ -14,6 +14,7 @@ class PyTubeDownloader:
             progressive=True, file_extension='mp4', res=f"{resolution}p"
         ).first()
         if not stream:
+            log.log_message(f"Не удалось найти видео поток {resolution}p для URL: {url} через PyTube", log_level="error")
             raise Exception("Не найден подходящий поток через pytube")
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
         stream.download(output_path=DOWNLOAD_DIR, filename=filename)
@@ -26,6 +27,7 @@ class PyTubeDownloader:
         yt = YouTube(url)
         stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
         if not stream:
+            log.log_message(f"Не удалось найти аудио поток аудио для URL: {url} через PyTube", log_level="error")
             raise Exception("Не найден аудио поток через pytube")
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp3")
         stream.download(output_path=DOWNLOAD_DIR, filename=filename)

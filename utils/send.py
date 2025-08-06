@@ -6,7 +6,8 @@ from aiogram.types import FSInputFile
 
 from utils import logger as log
 from utils.redis import is_subscriber
-from utils.server import remove_file_later
+from server import remove_file_later
+from fastapi import HTTPException
 
 from config import DOMAIN
 
@@ -24,22 +25,29 @@ async def send_video(
     Для подписчиков ссылка удаляется позже, для остальных — через 5 минут.
     Для маленьких файлов видео отправляется напрямую с последующим удалением файла.
     """
-    log.log_send_start(chat_id)
-
+ 
     if os.path.getsize(file_path) > 49 * 1024 * 1024:
         file_name = os.path.basename(file_path)
-        link = f"http://{DOMAIN}/video/{file_name}"
+        link = f"{DOMAIN}/video/{file_name}"
+    
+
+        keyboard = types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [types.InlineKeyboardButton(text="⚙️ Скачать видео", url=link)]
+            ]
+        )
 
         await bot.send_message(
             chat_id,
-            text=f"📥 Что бы скачать видео размером более 50МБ нажмите на кнопку скачать (видео удалится спустя 5 минут у обычных пользователей, у премиум пользователей в разы дольше)",
-            reply_markup=types.InlineKeyboardMarkup().add(
-                types.InlineKeyboardButton(text="⚙️ Скачать видео", url=link)
-            )
+            text=(
+                "📥 Чтобы скачать видео размером более 50МБ, нажмите на кнопку ниже.\n\n"
+                "⏳ Видео удалится спустя 5 минут у обычных пользователей, у премиум — в разы позже."
+            ),
+            reply_markup=keyboard
         )
 
         if await is_subscriber(user_id):
-            asyncio.create_task(remove_file_later(file_path, delay=1800, message=message))
+            asyncio.create_task(remove_file_later(file_path, delay=900, message=message))
         else:
             asyncio.create_task(remove_file_later(file_path, delay=300, message=message))
 

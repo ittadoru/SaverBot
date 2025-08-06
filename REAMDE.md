@@ -39,6 +39,10 @@
    ```bash
    python bot.py
    ```
+6. Запустите сервер FastAPI для хранения видео более 50МБ, а так же для обработки сообщения от YooKassa
+   ```
+   uvicorn server:app --port 8000
+   ```
 
 ### Через Docker
 1. Ознакомьтесь с инструкцией в файле `docker-compose.yaml`.
@@ -55,6 +59,7 @@
 - `REDIS_URL` — адрес Redis
 - `ADMINS` — список Telegram ID администраторов через запятую
 - `USE_PYTUBE` — использовать ли pytube для YouTube (True/False)
+- `DOMAIN` - ваш домен (пример https://example.com или если локально 127.0.0.1:8000)
 
 ## Структура проекта
 

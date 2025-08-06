@@ -41,9 +41,9 @@ class TikTokDownloader(BaseDownloader):
                         ydl.download([url])
                     return  # Загрузка прошла успешно
                 except yt_dlp.utils.DownloadError as e:
-                    log.log_download_error(f"❌ Ошибка yt-dlp (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
+                    log.log_error(f"❌ Ошибка yt-dlp (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
                 except Exception as e:
-                    log.log_download_error(f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
+                    log.log_error(f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
 
                 if attempt < max_attempts:
                     time.sleep(5)  # Ждем перед повтором

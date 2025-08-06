@@ -16,4 +16,4 @@ services:
     ports:
       - "8000:8000"
     command: >
-      /bin/bash -c "source /app/venv/bin/activate && uvicorn utils.server:app --host 0.0.0.0 --port 8000 & python bot.py"
+      /bin/bash -c "source /app/venv/bin/activate && uvicorn server:app --host 0.0.0.0 --port 8000 & python bot.py"

@@ -1,4 +1,4 @@
-from redis import r
+from redis_db import r
 from utils import logger as log
 
 async def increment_platform_download(user_id: int, platform: str):
