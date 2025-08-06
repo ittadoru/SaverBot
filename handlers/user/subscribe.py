@@ -1,7 +1,6 @@
 from aiogram import Router, types
-from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from payment import create_payment
+from utils.payment import create_payment
 from utils.redis import get_all_tariffs, get_tariff_by_id
 
 

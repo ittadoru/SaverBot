@@ -3,7 +3,7 @@ from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from datetime import datetime
-import payment
+import utils.payment as payment
 from utils import redis
 from utils import logger as log  # твоя функция логирования
 

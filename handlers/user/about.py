@@ -1,5 +1,4 @@
 from aiogram import types, Router
-from aiogram.filters import Command
 from .menu import keyboard
 
 router = Router()

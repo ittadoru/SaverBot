@@ -1,4 +1,4 @@
-from aiogram import Router, F, types
+from aiogram import Router, types
 from aiogram.types import CallbackQuery
 from datetime import datetime
 from utils.redis import r, get_platform_stats

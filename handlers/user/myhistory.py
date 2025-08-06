@@ -1,4 +1,3 @@
-from aiogram.filters import Command
 from aiogram import types, Router
 from utils.redis import get_user_links
 from .menu import keyboard
