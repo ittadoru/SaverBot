@@ -49,13 +49,13 @@ async def send_video(
             asyncio.create_task(remove_file_later(file_path, delay=900, message=message))
         else:
             asyncio.create_task(remove_file_later(file_path, delay=300, message=message))
-
     else:
+        me = await bot.get_me()
         # Отправка видео напрямую через Telegram
         await bot.send_video(
             chat_id=chat_id,
             video=FSInputFile(file_path),
-            caption="💾 Скачивай видео с YouTube | Instagram | Tiktok \n\n@savetokgrambot",
+            caption = f"💾 Скачивай видео с YouTube | Instagram | Tiktok \n\n@{me.username}",      
             width=width,
             height=height,
             supports_streaming=True,
@@ -73,11 +73,11 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
     Файл удаляется через 10 секунд после отправки.
     """
     log.log_send_start(chat_id)
-
+    me = await bot.get_me()
     await bot.send_audio(
         chat_id=chat_id,
         audio=FSInputFile(file_path),
-        caption="💾 Аудио из YouTube | @savetokgrambot",
+        caption = f"💾 Скачивай аудио с YouTube | Instagram | Tiktok \n\n@{me.username}" 
     )
 
     # Удаляем файл спустя 10 секунд после отправки
