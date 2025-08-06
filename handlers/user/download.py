@@ -54,7 +54,10 @@ async def download_handler(message: types.Message, state: FSMContext):
     await message.answer("⏳ Подождите немножко, видео скачивается...")
 
     try:
-        file_path = await downloader.download(url, user.id, message)
+        if platform == "youtube":
+            file_path = await downloader.download(url, user.id, message)
+        else:
+            file_path = await downloader.download(url, user.id)
 
         width, height = get_video_resolution(file_path)
 
