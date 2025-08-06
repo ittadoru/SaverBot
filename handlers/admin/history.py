@@ -117,4 +117,4 @@ async def delete_user_callback(callback: types.CallbackQuery):
     await r.delete(f"user:{uid}")
     await r.delete(f"user:busy:{uid}")
     await callback.answer(f"Пользователь {uid} удалён", show_alert=True)
-    await callback.answer()
+    await callback.message.answer()

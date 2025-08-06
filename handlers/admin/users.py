@@ -80,7 +80,7 @@ async def delete_all_users_callback(callback: types.CallbackQuery):
         await r.srem("subscribers", uid)
         await r.delete(f"user:{uid}")
         await r.delete(f"user:busy:{uid}")
-    await callback.answer(f"Все пользователи удалены", show_alert=True)
+    await callback.message.answer(f"Все пользователи удалены", show_alert=True)
 
 # Сброс busy-флагов всем пользователям
 @router.callback_query(lambda c: c.data == "reset_busy_flags")
@@ -96,7 +96,7 @@ async def reset_busy_flags(callback: types.CallbackQuery):
         if await r.exists(key):
             await r.delete(key)
             count += 1
-    await callback.answer(f"Сброшено busy-флагов: {count}", show_alert=True)
+    await callback.message.answer(f"Сброшено busy-флагов: {count}", show_alert=True)
 
 @router.callback_query(lambda c: c.data.startswith("users_page:"))
 async def paginate_users(callback: types.CallbackQuery):
