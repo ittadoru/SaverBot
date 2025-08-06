@@ -17,7 +17,6 @@ async def cmd_start(message: types.Message, bot: Bot):
     is_new = not await r.sismember("users", message.from_user.id)
     await add_user(message.from_user, bot)
     username = message.from_user.username or message.from_user.full_name or "пользователь"
-    await message.reply(f"ID этой темы: {message.message_thread_id}")
 
     if is_new:
         # Генерируем уникальный промокод для нового пользователя

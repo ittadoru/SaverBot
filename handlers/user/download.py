@@ -14,7 +14,7 @@ import asyncio
 from redis_db.download import increment_daily_download, increment_download, get_daily_downloads
 from redis_db.subscribers import is_subscriber
 from redis_db.platforms import increment_platform_download
-from redis_db.users import log_user_activity, push_recent_link
+from redis_db.users import log_user_activity, push_recent_link, is_user_busy, set_user_busy, clear_user_busy
 
 
 router = Router()
@@ -27,18 +27,19 @@ async def download_handler(message: types.Message, state: FSMContext):
     Если это YouTube и пользователь подписчик, предлагает выбор качества.  
     Для остальных платформ или неподписчиков скачивает видео напрямую через yt-dlp.
     """
+
+
     url = message.text.strip()
     user = message.from_user
     downloader = get_downloader(url)
-
-    daily_downloads = await get_daily_downloads(user.id)
-    if daily_downloads >= 20 and not await is_subscriber(user.id):
-        await message.answer("⚠️ Вы достигли лимита скачиваний на сегодня (20). Попробуйте завтра или оформите подписку!")
-        return
-
     platform = detect_platform(url)
+
+    # Антиспам: проверка busy-флага только если скачивание запускается сразу
     if platform == "youtube" and await is_subscriber(user.id):
         # Сохраняем ссылку в состоянии и предлагаем выбрать качество
+        if await is_user_busy(user.id):
+            await message.answer("⏳ Пожалуйста, дождитесь завершения предыдущей загрузки.")
+            return
         await state.update_data({f"yt_url_{user.id}": url})
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Видео 240p", callback_data="yt_download:video_240"),
@@ -51,6 +52,17 @@ async def download_handler(message: types.Message, state: FSMContext):
         return
 
     # Для остальных платформ (или неподписчиков) скачиваем сразу
+    if await is_user_busy(user.id):
+        await message.answer("⏳ Пожалуйста, дождитесь завершения предыдущей загрузки.")
+        return
+    await set_user_busy(user.id)
+
+    daily_downloads = await get_daily_downloads(user.id)
+    if daily_downloads >= 20 and not await is_subscriber(user.id):
+        await message.answer("⚠️ Вы достигли лимита скачиваний на сегодня (20). Попробуйте завтра или оформите подписку!")
+        await clear_user_busy(user.id)
+        return
+
     await message.answer("⏳ Подождите немножко, видео скачивается...")
 
     try:
@@ -69,8 +81,10 @@ async def download_handler(message: types.Message, state: FSMContext):
         await increment_download(platform, user_id=user.id)
         await increment_platform_download(user.id, platform)
         await increment_daily_download(user_id=user.id)
+        await clear_user_busy(user.id)
 
     except Exception as e:
+        await clear_user_busy(user.id)
         import traceback
         error_text = f"Ошибка: {e}"
         full_trace = traceback.format_exc()
@@ -94,12 +108,18 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
     Обработчик выбора формата скачивания видео с YouTube.
     Использует pytube, если включено, с fallback на yt-dlp.
     """
+
     format_type = callback.data.split(":")[1]
     user = callback.from_user
     url = (await state.get_data()).get(f"yt_url_{user.id}")
 
     if not url:
         return await callback.answer("Ссылка не найдена.")
+
+    # Антиспам: проверка и установка busy-флага (до скачивания)
+    if await is_user_busy(user.id):
+        return await callback.message.answer("⏳ Пожалуйста, дождитесь завершения предыдущей загрузки.")
+    await set_user_busy(user.id)
 
     await callback.message.answer("⏳ Скачиваем...")
 
@@ -140,13 +160,16 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
             asyncio.create_task(send_audio(callback.bot, callback.message, callback.message.chat.id, file_path))
 
         else:
+            await clear_user_busy(user.id)
             return await callback.answer("Неизвестный формат.")
 
         await log_user_activity(user.id)
         await push_recent_link(user.id, url)
         await increment_download("youtube", user_id=user.id)
+        await clear_user_busy(user.id)
 
     except Exception as e:
+        await clear_user_busy(user.id)
         import traceback
         error_text = f"Ошибка: {e}"
         full_trace = traceback.format_exc()

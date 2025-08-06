@@ -63,9 +63,40 @@ def get_users_keyboard(page: int, total_pages: int) -> InlineKeyboardMarkup:
         ),
     ]
     return InlineKeyboardMarkup(
-        inline_keyboard=[buttons, [InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]]
+        inline_keyboard=[
+            buttons,
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
+        ]
     )
+# Удаление всех пользователей
+@router.callback_query(lambda c: c.data == "delete_all_users")
+async def delete_all_users_callback(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMINS:
+        await callback.answer("⛔️ У вас нет доступа к этой команде.", show_alert=True)
+        return
+    user_ids = list(await r.smembers("users"))
+    for uid in user_ids:
+        await r.srem("users", uid)
+        await r.srem("subscribers", uid)
+        await r.delete(f"user:{uid}")
+        await r.delete(f"user:busy:{uid}")
+    await callback.answer(f"Все пользователи удалены", show_alert=True)
 
+# Сброс busy-флагов всем пользователям
+@router.callback_query(lambda c: c.data == "reset_busy_flags")
+async def reset_busy_flags(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMINS:
+        await callback.message.answer("⛔️ У вас нет доступа к этой команде.")
+        return
+
+    user_ids = list(await r.smembers("users"))
+    count = 0
+    for uid in user_ids:
+        key = f"user:busy:{uid}"
+        if await r.exists(key):
+            await r.delete(key)
+            count += 1
+    await callback.answer(f"Сброшено busy-флагов: {count}", show_alert=True)
 
 @router.callback_query(lambda c: c.data.startswith("users_page:"))
 async def paginate_users(callback: types.CallbackQuery):

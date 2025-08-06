@@ -81,8 +81,10 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
     if username:
         user_info += f"Username: @{username}\n"
 
+    # Клавиатура: удалить пользователя и назад
     keyboard = types.InlineKeyboardMarkup(
         inline_keyboard=[
+            [types.InlineKeyboardButton(text=f"🗑️ Удалить пользователя", callback_data=f"delete_user:{user_id}")],
             [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
         ]
     )
@@ -97,8 +99,22 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
         return
 
     # Формирование текста с последними ссылками
-    links_text = "\n".join([f"<pre>{link}</pre>" for link in links])
+    links_text = "\n".join([f"<pre>{link}</pre>" for link in links[:5]])
     full_text = user_info + "\n\n<b>🔗 Последние ссылки:</b>\n\n" + links_text
 
     await message.answer(full_text, parse_mode="HTML", reply_markup=keyboard)
     await state.clear()
+
+@router.callback_query(lambda c: c.data.startswith("delete_user:"))
+async def delete_user_callback(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMINS:
+        await callback.answer("⛔️ У вас нет доступа к этой команде.", show_alert=True)
+        return
+    uid = callback.data.split(":")[1]
+    # Удаляем пользователя из всех связанных структур
+    await r.srem("users", uid)
+    await r.srem("subscribers", uid)
+    await r.delete(f"user:{uid}")
+    await r.delete(f"user:busy:{uid}")
+    await callback.answer(f"Пользователь {uid} удалён", show_alert=True)
+    await callback.answer()

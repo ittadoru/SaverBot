@@ -96,3 +96,22 @@ async def push_recent_link(user_id: int, url: str):
     key = f"recent:links:{user_id}"
     await r.lpush(key, url)
     await r.ltrim(key, 0, 9)  # сохраняем только 10 последних ссылок
+
+async def set_user_busy(user_id: int, timeout: int = 600):
+    """
+    Установить флаг занятости пользователя (на время скачивания).
+    timeout — время в секундах, по умолчанию 10 минут.
+    """
+    await r.set(f"user_busy:{user_id}", 1, ex=timeout)
+
+async def is_user_busy(user_id: int) -> bool:
+    """
+    Проверить, занят ли пользователь (идёт скачивание).
+    """
+    return await r.exists(f"user_busy:{user_id}") == 1
+
+async def clear_user_busy(user_id: int):
+    """
+    Снять флаг занятости пользователя.
+    """
+    await r.delete(f"user_busy:{user_id}")
