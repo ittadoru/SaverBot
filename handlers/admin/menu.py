@@ -22,7 +22,7 @@ def get_admin_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="💳 Управление тарифами", callback_data="tariff_menu")],
         [
             InlineKeyboardButton(text="📨 Обычная рассылка", callback_data="broadcast_start"),
-            InlineKeyboardButton(text="📰 Рекламная рассылка", callback_data="ad_broadcast_start")
+            InlineKeyboardButton(text="💸 Рекламная рассылка", callback_data="ad_broadcast_start")
         ],
         [
             InlineKeyboardButton(text="📈 Топ за 7 дней", callback_data="top_week"),
@@ -47,7 +47,7 @@ async def promocode_menu(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Добавить промокод", callback_data="add_promocode")],
         [InlineKeyboardButton(text="➖ Удалить промокод", callback_data="remove_promocode")],
-        [InlineKeyboardButton(text="📋 Все промокоды", callback_data="all_promocodes")],
+        [InlineKeyboardButton(text="🎟 Все промокоды", callback_data="all_promocodes")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
     ])
     await callback.message.edit_text("Меню промокодов:", reply_markup=keyboard)
@@ -58,7 +58,7 @@ async def promocode_menu(callback: CallbackQuery):
 async def manage_users_menu(callback: CallbackQuery):
     """Меню управления пользователями."""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Все пользователи", callback_data="all_users")],
+        [InlineKeyboardButton(text="👥 Все пользователи", callback_data="all_users")],
         [InlineKeyboardButton(text="🔍 История пользователя", callback_data="user_history_start")],
         [InlineKeyboardButton(text="🗑️ Удалить всех пользователей", callback_data="delete_all_users")],
         [InlineKeyboardButton(text="♻️ Сбросить busy-флаги", callback_data="reset_busy_flags")],

@@ -75,7 +75,7 @@ async def payment_callback_handler(callback: types.CallbackQuery):
         f"💳 Для оплаты тарифа <b>{tariff.name}</b> нажмите на кнопку оплаты",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="💵 Оплатить", url=payment_url)],
+                [InlineKeyboardButton(text="🪙 Оплатить", url=payment_url)],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data="subscribe")]
             ]
         )
