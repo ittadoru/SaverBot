@@ -4,10 +4,10 @@ import os
 import uuid
 from config import DOWNLOAD_DIR, ADMIN_ERROR
 from utils import yt_dlp_logger as yt, logger as log
-from aiogram import types
+
 
 class InstagramDownloader(BaseDownloader):
-    async def download(self, url: str, message: types.Message) -> str:
+    async def download(self, url: str, message) -> str:
         """
         Загрузка видео с Instagram с помощью yt-dlp.
         """
@@ -35,43 +35,40 @@ class InstagramDownloader(BaseDownloader):
 
         def run_download_with_retries():
             max_attempts = 3
+            username = None
+            if hasattr(message, 'from_user') and hasattr(message.from_user, 'username'):
+                username = message.from_user.username
+            elif hasattr(message, 'username'):
+                username = message.username
+            elif isinstance(message, int):
+                username = f'user_id={message}'
             for attempt in range(1, max_attempts + 1):
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([url])
                     return  # Загрузка прошла успешно
                 except yt_dlp.utils.DownloadError as e:
-                    log.log_error(f"❌ Ошибка yt-dlp (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
+                    err_str = str(e)
+                    # Проверка на age-restricted/18+ видео
+                    if any(x in err_str.lower() for x in ["18 years old", "age-restricted", "login required", "restricted video"]):
+                        log.log_message(f"[AGE-RESTRICTED] Видео с ограничением: {url} (user: {username})", log_level="warning")
+                        # Сообщение пользователю, если возможно
+                        if hasattr(message, 'answer'):
+                            import asyncio
+                            asyncio.run(message.answer("🚫 Это видео недоступно для скачивания, так как имеет возрастные ограничения или требует авторизации в Instagram."))
+                        return "AGE_RESTRICTED"
+                    log.log_error(f"❌ Ошибка yt-dlp (попытка {attempt}/{max_attempts}): {e}", username)
                 except Exception as e:
-                    log.log_error(f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}", message.from_user.username)
+                    log.log_error(f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}", username)
 
                 if attempt < max_attempts:
                     time.sleep(5)  # Ждем перед повторной попыткой
                 else:
                     raise Exception("🚫 Все попытки загрузки не удались")
 
-        try:
-            # Запускаем синхронную загрузку в пуле потоков, чтобы не блокировать event loop
-            await loop.run_in_executor(None, run_download_with_retries)
-        except Exception as e:
-            import traceback
-
-            error_text = f"Ошибка: {e}"
-            full_trace = traceback.format_exc()
-            log.log_error(error_text)
-            log.log_error(full_trace)
-
-            # Отправляем администратору сообщение с ошибкой, если есть доступ к message
-            if message is not None:
-                try:
-                    await message.bot.send_message(
-                        ADMIN_ERROR,
-                        f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
-                        parse_mode="HTML"
-                    )
-                except Exception as send_err:
-                    log.log_error(f"Не удалось отправить ошибку админу: {send_err}")
-            raise Exception("🚫 Все попытки загрузки не удались")
-
+        result = await loop.run_in_executor(None, run_download_with_retries)
+        if result == "AGE_RESTRICTED":
+            return None
+        # Ошибки
         log.log_download_complete(filename)  # Логируем успешное завершение
         return filename

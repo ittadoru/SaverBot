@@ -90,25 +90,36 @@ async def forward_to_support(message: Message, state: FSMContext):
 
     topic_id = ticket["topic_id"]
 
-    # Пересылаем текстовое сообщение
-    if message.text:
-        await message.bot.send_message(
-            SUPPORT_GROUP_ID,
-            f"Сообщение от @{username or 'Без username'} | {user_id}:\n{message.text}",
-            message_thread_id=topic_id
-        )
+    try:
+        # Пересылаем текстовое сообщение
+        if message.text:
+            await message.bot.send_message(
+                SUPPORT_GROUP_ID,
+                f"Сообщение от @{username or 'Без username'} | {user_id}:\n{message.text}",
+                message_thread_id=topic_id
+            )
 
-    # Пересылаем фото, если есть
-    if message.photo:
-        await message.bot.send_photo(
-            SUPPORT_GROUP_ID,
-            message.photo[-1].file_id,
-            caption=f"Фото от @{username or 'Без username'} | {user_id}:\n{message.caption or ''}",
-            message_thread_id=topic_id
-        )
+        # Пересылаем фото, если есть
+        if message.photo:
+            await message.bot.send_photo(
+                SUPPORT_GROUP_ID,
+                message.photo[-1].file_id,
+                caption=f"Фото от @{username or 'Без username'} | {user_id}:\n{message.caption or ''}",
+                message_thread_id=topic_id
+            )
 
-    log.log_message(
-        f"Пользователь @{username or 'Без username'} | id={user_id} отправил сообщение в поддержку: "
-        f"{message.text or '[не текстовое сообщение]'}",
-        emoji="📩"
-    )
+        log.log_message(
+            f"Пользователь @{username or 'Без username'} | id={user_id} отправил сообщение в поддержку: "
+            f"{message.text or '[не текстовое сообщение]'}",
+            emoji="📩"
+        )
+    except Exception as e:
+        from aiogram.exceptions import TelegramBadRequest
+        if isinstance(e, TelegramBadRequest) and "message thread not found" in str(e):
+            await close_ticket(redis, user_id)
+            await message.answer("❗️ Диалог с поддержкой был удалён или устарел. Пожалуйста, начните чат заново через /help.")
+            await state.clear()
+            log.log_error(f"Тема поддержки не найдена для user_id={user_id}, topic_id={topic_id}. Тикет закрыт автоматически.")
+        else:
+            log.log_error(f"Ошибка при отправке сообщения в поддержку: {e}")
+            await message.answer("❗️ Не удалось отправить сообщение в поддержку. Попробуйте позже.")
