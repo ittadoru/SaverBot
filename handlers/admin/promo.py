@@ -33,11 +33,10 @@ async def process_add_promocode(message: types.Message, state: FSMContext):
         if len(parts) == 2 and parts[1].isdigit():
             code, days = parts[0], int(parts[1])
             await add_promocode(code, days)
-            log.log_message(
-                f"Добавлен промокод: {code} на {days} дней админом "
-                f"{message.from_user.username} ({message.from_user.id})",
-                emoji="🎟"
-            )
+
+            log.log_message(f"Добавлен промокод: {code} на {days} дней админом ", emoji="🎟")
+            log.log_message(f"{message.from_user.username} ({message.from_user.id})", level=1)
+
             await message.answer(f"Промокод {code} на {days} дней добавлен.")
             await state.clear()
         else:
@@ -57,23 +56,17 @@ async def remove_promocode_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PromoStates.remove)
     await callback.answer()
 
-
 # Обработка удаления промокода
 @router.message(PromoStates.remove)
 async def process_remove_promocode(message: types.Message, state: FSMContext):
-    if message.from_user.id not in ADMINS:
-        return
-
     code = message.text.strip()
     promocodes = await get_all_promocodes()
 
     if code in promocodes:
         await remove_promocode(code)
-        log.log_message(
-            f"Удалён промокод: {code} админом "
-            f"{message.from_user.username} ({message.from_user.id})",
-            emoji="🗑"
-        )
+        log.log_message(f"Удалён промокод: {code} админом ", emoji="🗑")
+        log.log_message(f"{message.from_user.username} ({message.from_user.id})", level=1)
+
         text = f"Промокод {code} удалён."
     else:
         text = f"Промокод {code} не найден."
@@ -81,18 +74,17 @@ async def process_remove_promocode(message: types.Message, state: FSMContext):
     await message.answer(text)
     await state.clear()
 
-
 # Обработка нажатия кнопки "Все промокоды"
 @router.callback_query(lambda c: c.data == "all_promocodes")
 async def show_all_promocodes(callback: CallbackQuery):
     promocodes = await get_all_promocodes()
 
     if promocodes:
-        text = "<b>Все промокоды:</b>\n" + "\n".join(
-            [f"{k}: {v} дней" for k, v in promocodes.items()]
+        text = "<b>🎟 Все промокоды:</b>\n" + "\n".join(
+            [f"{k}: \t{v} дней" for k, v in promocodes.items()]
         )
     else:
-        text = "Нет активных промокодов."
+        text = "❌ Нет активных промокодов."
 
     await callback.message.answer(text, parse_mode="HTML")
     await callback.answer()

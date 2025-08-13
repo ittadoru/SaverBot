@@ -35,12 +35,18 @@ async def show_tariffs_for_removal(callback: CallbackQuery):
         await callback.answer()
         return
     # Формируем клавиатуру с тарифами для удаления
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
+    buttons = [
+        InlineKeyboardButton(
             text=f"{t.name} ({t.duration_days} дней, {t.price} ₽) ❌",
             callback_data=f"delete_tariff:{t.id}"
-        )] for t in tariffs
-    ])
+        ) for t in tariffs 
+    ]
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            buttons,
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="tariff_menu")]
+        ]
+    )
     await callback.message.edit_text("Выберите тариф для удаления:", reply_markup=keyboard)
     await callback.answer()
 

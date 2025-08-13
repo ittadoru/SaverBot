@@ -33,31 +33,13 @@ async def process_ad_broadcast(message: Message, state: FSMContext):
                 await message.bot.send_message(uid, message.text)
                 count_sent += 1
             except Exception as e:
-                print(f"Ошибка отправки пользователю {uid}: {e}")
+                await message.bot.send_message(ADMIN_ERROR, f"Ошибка отправки пользователю {uid}: {e}")
+                log.log_error(f"Ошибка отправки пользователю {uid}: {e}")
 
-    try:
-        await message.reply(
-            f"Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам)."
-        )
-        log.log_message(
-            f"Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам).",
-            emoji="📢"
-        )
-    except Exception as e:
-        # Логирование и уведомление об ошибке при отправке отчёта
-        error_text = f"Ошибка: {e}"
-        full_trace = traceback.format_exc()
-
-        log.log_error(error_text)
-        log.log_error(full_trace)
-
-        try:
-            await message.bot.send_message(
-                ADMIN_ERROR,
-                f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
-                parse_mode="HTML"
-            )
-        except Exception as send_err:
-            log.log_error(f"Не удалось отправить ошибку админу: {send_err}")
-
-    await state.clear()
+    await message.reply(
+        f"📢 Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам)."
+    )
+    log.log_message(
+        f"Рекламная рассылка отправлена {count_sent} пользователям (не подписчикам).",
+        emoji="📢"
+    )

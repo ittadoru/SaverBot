@@ -22,43 +22,31 @@ async def handle_stats(callback: CallbackQuery):
         today_key = f"active_users:{datetime.date.today()}"
         active_users_today = await r.pfcount(today_key)
         total_subscribers = len(await r.smembers("subscribers"))
-
-        msg = (
-            f"📊 <b>Статистика:</b>\n"
-            f"👥 Уникальных пользователей: <b>{total_users}</b>\n"
-            f"💎 С подпиской: <b>{total_subscribers}</b>\n"
-            f"🟢 Активных сегодня: <b>{active_users_today}</b>\n"
-            f"📥 Всего скачиваний: <b>{total_downloads}</b>\n\n"
-            f"• YouTube: {yt_downloads}\n"
-            f"• Instagram: {insta_downloads}\n"
-            f"• TikTok: {tiktok_downloads}"
-        )
-
-        keyboard = types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
-            ]
-        )
-
-        await callback.message.edit_text(msg, parse_mode="HTML", reply_markup=keyboard)
-        await callback.answer()
-
     except Exception as e:
-        import traceback
+        log.log_error(f"Ошибка при получении статистики: {e}")
+        await callback.message.answer("⚠️ Ошибка при получении статистики.")
+        await callback.message.bot.send_message(ADMIN_ERROR, f"Ошибка при получении статистики: {e}")
+        return await callback.answer()
 
-        error_text = f"Ошибка: {e}"
-        full_trace = traceback.format_exc()
-        log.log_error(error_text)
-        log.log_error(full_trace)
+    msg = (
+        f"📊 <b>Статистика:</b>\n"
+        f"👥 Уникальных пользователей: <b>{total_users}</b>\n"
+        f"💎 С подпиской: <b>{total_subscribers}</b>\n"
+        f"🟢 Активных сегодня: <b>{active_users_today}</b>\n"
+        f"📥 Всего скачиваний: <b>{total_downloads}</b>\n\n"
+        f"• YouTube: {yt_downloads}\n"
+        f"• Instagram: {insta_downloads}\n"
+        f"• TikTok: {tiktok_downloads}"
+    )
 
-        try:
-            await callback.message.bot.send_message(
-                ADMIN_ERROR,
-                f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
-                parse_mode="HTML",
-            )
-        except Exception as send_err:
-            log.log_error(f"Не удалось отправить ошибку админу: {send_err}")
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
+        ]
+    )
+    log.log_message("Админ запросил статистику", emoji="📊")
+    await callback.message.edit_text(msg, parse_mode="HTML", reply_markup=keyboard)
+    await callback.answer()
 
 
 async def _get_top_users():
@@ -104,6 +92,7 @@ async def handle_top_week(callback: CallbackQuery):
                     [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
                 ]
             )
+            log.log_message("Админ запросил топ пользователей за 7 дней, но данных нет", emoji="✖️")
             await callback.message.edit_text("Нет данных для отображения топа.", reply_markup=keyboard)
             return await callback.answer()
 
@@ -114,11 +103,14 @@ async def handle_top_week(callback: CallbackQuery):
         )
 
         await callback.message.edit_text(msg, parse_mode="HTML", reply_markup=keyboard)
+        log.log_message("Админ запросил топ пользователей за 7 дней", emoji="🏆")
         await callback.answer()
 
-    except RedisError:
+    except Exception as e:
         await callback.message.answer("⚠️ Ошибка при получении топа.")
-        await callback.answer()
+        log.log_error(f"Ошибка при получении топа: {e}")
+        await callback.message.bot.send_message(ADMIN_ERROR, f"Ошибка при получении топа: {e}")
+        return await callback.answer()
 
 
 @router.callback_query(lambda c: c.data == "top_all")
@@ -133,6 +125,7 @@ async def handle_top_all(callback: CallbackQuery):
                     [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
                 ]
             )
+            log.log_message("Админ запросил топ пользователей за всё время, но данных нет", emoji="✖️")
             await callback.message.edit_text("Нет данных для отображения топа.", reply_markup=keyboard)
             return await callback.answer()
 
@@ -143,8 +136,11 @@ async def handle_top_all(callback: CallbackQuery):
         )
 
         await callback.message.edit_text(msg, parse_mode="HTML", reply_markup=keyboard)
+        log.log_message("Админ запросил топ пользователей за всё время", emoji="🏅")
         await callback.answer()
 
-    except RedisError:
+    except Exception as e:
         await callback.message.answer("⚠️ Ошибка при получении топа.")
-        await callback.answer()
+        log.log_error(f"Ошибка при получении топа: {e}")
+        await callback.message.bot.send_message(ADMIN_ERROR, f"Ошибка при получении топа: {e}")
+        return await callback.answer()

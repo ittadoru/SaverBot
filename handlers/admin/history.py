@@ -1,12 +1,11 @@
 from aiogram import types, Router
 from aiogram.fsm.context import FSMContext
 
-from config import ADMINS
 from redis_db import r
 from redis_db.users import get_user_links
 from states.history import HistoryStates
 from datetime import datetime
-
+from utils import logger as log
 
 router = Router()
 
@@ -14,9 +13,6 @@ router = Router()
 @router.callback_query(lambda c: c.data == "user_history_start")
 async def show_user_history(callback: types.CallbackQuery, state: FSMContext):
     """Запрос ID или username для просмотра истории пользователя (только для админов)."""
-    if callback.from_user.id not in ADMINS:
-        return await callback.message.answer("⛔️ У вас нет доступа к этой команде.")
-
     await state.set_state(HistoryStates.waiting_for_id_or_username)
 
     keyboard = types.InlineKeyboardMarkup(
@@ -102,19 +98,19 @@ async def process_id_or_username(message: types.Message, state: FSMContext):
     links_text = "\n".join([f"<pre>{link}</pre>" for link in links[:5]])
     full_text = user_info + "\n\n<b>🔗 Последние ссылки:</b>\n\n" + links_text
 
+    log.log_message(f"Админ просмотрел историю пользователя {user_id}", emoji="📜")
     await message.answer(full_text, parse_mode="HTML", reply_markup=keyboard)
     await state.clear()
 
 @router.callback_query(lambda c: c.data.startswith("delete_user:"))
 async def delete_user_callback(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMINS:
-        await callback.answer("⛔️ У вас нет доступа к этой команде.", show_alert=True)
-        return
     uid = callback.data.split(":")[1]
+
     # Удаляем пользователя из всех связанных структур
     await r.srem("users", uid)
     await r.srem("subscribers", uid)
     await r.delete(f"user:{uid}")
     await r.delete(f"user:busy:{uid}")
-    await callback.answer(f"Пользователь {uid} удалён", show_alert=True)
-    await callback.message.answer()
+
+    await callback.message.answer(f"Пользователь {uid} удалён", show_alert=True)
+    log.log_message(f"Админ удалил пользователя {uid}", emoji="🗑️")

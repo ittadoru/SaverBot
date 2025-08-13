@@ -2,9 +2,10 @@ from aiogram import types, Router
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import ADMINS
 from redis_db import r
+from utils import logger as log
+
 
 router = Router()
-
 
 @router.callback_query(lambda c: c.data == "all_users")
 async def list_users(callback: types.CallbackQuery):
@@ -12,13 +13,9 @@ async def list_users(callback: types.CallbackQuery):
     Показывает список всех пользователей с отметкой о подписке.
     Отображает первую страницу с пагинацией.
     """
-    if callback.from_user.id not in ADMINS:
-        await callback.message.answer("⛔️ У вас нет доступа к этой команде.")
-        return
-
     user_ids = list(await r.smembers("users"))
     if not user_ids:
-        await callback.message.answer("Пользователей пока нет.")
+        await callback.message.answer("❌ Пользователей пока нет.")
         return
 
     user_ids.sort()
@@ -46,6 +43,7 @@ async def list_users(callback: types.CallbackQuery):
         parse_mode="HTML",
         reply_markup=get_users_keyboard(page, total_pages),
     )
+    log.log_message("Админ запросил список пользователей", emoji="👥")
     await callback.answer()
 
 
@@ -68,27 +66,23 @@ def get_users_keyboard(page: int, total_pages: int) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")]
         ]
     )
+
 # Удаление всех пользователей
 @router.callback_query(lambda c: c.data == "delete_all_users")
 async def delete_all_users_callback(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMINS:
-        await callback.answer("⛔️ У вас нет доступа к этой команде.", show_alert=True)
-        return
     user_ids = list(await r.smembers("users"))
     for uid in user_ids:
         await r.srem("users", uid)
         await r.srem("subscribers", uid)
         await r.delete(f"user:{uid}")
         await r.delete(f"user:busy:{uid}")
+
+    log.log_message("Админ удалил всех пользователей", emoji="🗑️")
     await callback.message.answer(f"Все пользователи удалены", show_alert=True)
 
 # Сброс busy-флагов всем пользователям
 @router.callback_query(lambda c: c.data == "reset_busy_flags")
 async def reset_busy_flags(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMINS:
-        await callback.message.answer("⛔️ У вас нет доступа к этой команде.")
-        return
-
     user_ids = list(await r.smembers("users"))
     count = 0
     for uid in user_ids:
@@ -96,6 +90,8 @@ async def reset_busy_flags(callback: types.CallbackQuery):
         if await r.exists(key):
             await r.delete(key)
             count += 1
+
+    log.log_message(f"Админ сбросил busy-флаги для {count} пользователей", emoji="🔄")
     await callback.message.answer(f"Сброшено busy-флагов: {count}", show_alert=True)
 
 @router.callback_query(lambda c: c.data.startswith("users_page:"))

@@ -2,7 +2,7 @@ import os
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, FSInputFile
 from aiogram.fsm.context import FSMContext
-
+from utils import logger as log
 from states.log_export import LogExport
 
 router = Router()
@@ -14,6 +14,7 @@ async def send_last_logs(callback: CallbackQuery):
     log_path = "logs/bot.log"
     if os.path.exists(log_path):
         file = FSInputFile(log_path)
+        log.log_message("Админ запросил последние логи", emoji="📄")
         await callback.message.answer_document(file, caption="📄 Логи за последнее время")
     else:
         await callback.message.answer("Файл логов не найден.")
@@ -38,8 +39,10 @@ async def send_logs_by_date(message: Message, state: FSMContext):
 
     if os.path.exists(filename):
         file = FSInputFile(filename)
+        log.log_message(f"Админ запросил логи за {user_date}", emoji="📄")
         await message.answer_document(file, caption=f"📄 Логи за {user_date}")
     else:
-        await message.answer("Файл за указанную дату не найден.")
+        log.log_error(f"Файл логов за {user_date} не найден")
+        await message.answer(f"Файл логов за {user_date} дату не найден.")
 
     await state.clear()
