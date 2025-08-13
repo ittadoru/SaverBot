@@ -41,6 +41,12 @@ async def remove_promocode(code: str):
     """
     await r.hdel("promocodes", code)
 
+async def remove_all_promocodes():
+    """
+    Удалить все промокоды.
+    """
+    await r.delete("promocodes")
+    
 async def get_all_promocodes():
     """
     Получить все промокоды.

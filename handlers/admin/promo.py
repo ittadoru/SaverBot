@@ -1,8 +1,7 @@
 from aiogram import Router, types
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-
-from redis_db.subscribers import get_all_promocodes, remove_promocode, add_promocode
+from redis_db.subscribers import get_all_promocodes, remove_promocode, add_promocode, remove_all_promocodes
 from utils import logger as log
 from config import ADMINS
 from states.promo import PromoStates
@@ -87,4 +86,11 @@ async def show_all_promocodes(callback: CallbackQuery):
         text = "❌ Нет активных промокодов."
 
     await callback.message.answer(text, parse_mode="HTML")
+    await callback.answer()
+
+@router.callback_query(lambda c: c.data == "remove_all_promocodes")
+async def remove_all_promocodes_handler(callback: CallbackQuery):
+    await remove_all_promocodes()
+    log.log_message("Удалены все промокоды админом", emoji="🗑")
+    await callback.message.answer("❌ Все промокоды удалены.")
     await callback.answer()

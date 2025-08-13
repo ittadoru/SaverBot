@@ -48,6 +48,7 @@ async def promocode_menu(callback: CallbackQuery):
         [InlineKeyboardButton(text="➕ Добавить промокод", callback_data="add_promocode")],
         [InlineKeyboardButton(text="➖ Удалить промокод", callback_data="remove_promocode")],
         [InlineKeyboardButton(text="🎟 Все промокоды", callback_data="all_promocodes")],
+        [InlineKeyboardButton(text="🗑 Удалить все промокоды", callback_data="remove_all_promocodes")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu")]
     ])
     await callback.message.edit_text("Меню промокодов:", reply_markup=keyboard)
