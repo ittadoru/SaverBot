@@ -15,7 +15,7 @@ from db.base import Base
 
 class DailyDownload(Base):
     __tablename__ = "daily_downloads"
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
     date = Column(Date, nullable=False)
     count = Column(Integer, nullable=False, default=0)
     __table_args__ = (
@@ -25,7 +25,7 @@ class DailyDownload(Base):
 
 class TotalDownload(Base):
     __tablename__ = "total_downloads"
-    user_id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)
     total = Column(BigInteger, nullable=False, default=0)
 
 
@@ -33,7 +33,7 @@ class DownloadLink(Base):
     """Хранит последние ссылки пользователя ( максимум N по времени )."""
     __tablename__ = "user_download_links"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, index=True, nullable=False)
+    user_id = Column(BigInteger, index=True, nullable=False)
     url = Column(String(1024), nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 

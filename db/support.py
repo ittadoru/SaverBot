@@ -1,6 +1,6 @@
 """Модели тикетов поддержки и CRUD-операции: создание, сообщения, поиск и закрытие."""
 
-from sqlalchemy import (Column, DateTime, ForeignKey, Integer, String, func,
+from sqlalchemy import (Column, DateTime, ForeignKey, Integer, BigInteger, String, func,
                         select)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
@@ -11,7 +11,7 @@ from db.base import Base
 class SupportTicket(Base):
     __tablename__ = 'support_tickets'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(BigInteger, ForeignKey('users.id', ondelete="CASCADE"), nullable=False, index=True)
     username = Column(String, nullable=True)
     topic_id = Column(Integer, nullable=False, index=True)
     is_closed = Column(Integer, default=0, nullable=False)  # 0 = Открыт, 1 = Закрыт
@@ -24,7 +24,7 @@ class SupportTicket(Base):
 class SupportMessage(Base):
     __tablename__ = 'support_messages'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    ticket_id = Column(Integer, ForeignKey('support_tickets.id'))
+    ticket_id = Column(Integer, ForeignKey('support_tickets.id'))  # Оставляем ticket_id как Integer, только user_id меняем на BigInteger
     message = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     ticket = relationship('SupportTicket', back_populates='messages')

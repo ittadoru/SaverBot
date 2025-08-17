@@ -42,8 +42,8 @@ async def tariff_menu(message: Message, edit: bool = False) -> None:
     builder = InlineKeyboardBuilder()
     builder.button(text="➕ Добавить", callback_data="add_tariff")
     if tariffs:
-        builder.button(text="✏ Изменить", callback_data="edit_tariff_pick")
-        builder.button(text="✖ Удалить", callback_data="delete_tariff_menu")
+        builder.button(text="🖋️ Изменить", callback_data="edit_tariff_pick")
+        builder.button(text="✖️ Удалить", callback_data="delete_tariff_menu")
     builder.button(text="⬅️ Назад", callback_data="admin_menu")
     builder.adjust(1)
     if edit:
@@ -190,7 +190,7 @@ async def edit_tariff_field_select(callback: CallbackQuery, state: FSMContext) -
     await state.update_data(edit_tariff_id=tariff_id)
     kb = InlineKeyboardBuilder()
     kb.button(text="📝 Имя", callback_data="edit_field:name")
-    kb.button(text="⏱ Дни", callback_data="edit_field:days")
+    kb.button(text="📅 Дни", callback_data="edit_field:days")
     kb.button(text="💰 Цена", callback_data="edit_field:price")
     kb.button(text="⬅ Назад", callback_data="tariff_menu")
     kb.adjust(2, 2, 1)

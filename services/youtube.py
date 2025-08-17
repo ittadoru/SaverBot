@@ -11,19 +11,17 @@ import os
 import uuid
 import time
 import asyncio
-from uuid import uuid4
 import yt_dlp
 from aiogram import types
 
-from utils import yt_dlp_logger as yt
-from utils.logger import get_logger
+from utils.logger import get_logger, YTDlpLoggerAdapter
 from db.subscribers import is_subscriber as db_is_subscriber
 from db.base import get_session
 from .base import BaseDownloader
 from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
 
-logger = get_logger(__name__, platform="youtube")
 
+logger = get_logger(__name__, platform="youtube")
 
 class YTDLPDownloader(BaseDownloader):
     async def download(
@@ -76,7 +74,7 @@ class YTDLPDownloader(BaseDownloader):
             'outtmpl': filename,
             'merge_output_format': 'mp4',
             'quiet': False,
-            'logger': yt.YTDlpLoggerAdapter(),
+            'logger': YTDlpLoggerAdapter(),
             'retries': 10,
             'fragment_retries': 10,
             'socket_timeout': 30,
@@ -127,7 +125,7 @@ class YTDLPDownloader(BaseDownloader):
             'outtmpl': filename,
             'merge_output_format': 'mp3',
             'quiet': False,
-            'logger': yt.YTDlpLoggerAdapter(),
+            'logger': YTDlpLoggerAdapter(),
             'retries': 10,
             'fragment_retries': 10,
             'socket_timeout': 30,

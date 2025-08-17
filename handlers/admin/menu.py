@@ -20,6 +20,7 @@ def get_admin_menu_keyboard():
     builder.row(InlineKeyboardButton(text="📊 Экспорт таблицы", callback_data="export_table_menu"))
     builder.row(InlineKeyboardButton(text="💳 Управление тарифами", callback_data="tariff_menu"))
     builder.row(InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu"))
+    builder.row(InlineKeyboardButton(text="🗑️ Очистить downloads", callback_data="clear_downloads"))
     builder.row(
         InlineKeyboardButton(text="📨 Обычная", callback_data="broadcast_start"),
         InlineKeyboardButton(text="💸 Рекламная", callback_data="ad_broadcast_start"),
@@ -63,3 +64,13 @@ async def back_to_admin_menu(callback: CallbackQuery):
     """Обрабатывает кнопку 'Назад', возвращая к главной админ-панели."""
     await callback.message.edit_text("🔐 Админ-панель", reply_markup=get_admin_menu_keyboard())
     await callback.answer()
+
+
+# Обработчик для удаления всех файлов из downloads
+from utils.delete_downloads import delete_all_files_in_downloads
+
+@router.callback_query(F.data == "clear_downloads")
+async def clear_downloads_handler(callback: CallbackQuery):
+    deleted = delete_all_files_in_downloads()
+    await callback.answer()
+    await callback.message.answer(f"🗑️ Удалено файлов из downloads: {deleted}")

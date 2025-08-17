@@ -7,7 +7,6 @@ from contextlib import suppress
 from typing import Optional
 
 from aiogram import F, Router, types
-from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramAPIError
 
@@ -41,8 +40,16 @@ def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+
 @router.callback_query(F.data == "subscribe")
-async def subscribe_handler(callback: types.CallbackQuery) -> None:
+async def subscribe_handler_callback(callback: types.CallbackQuery) -> None:
+    await _show_subscribe_menu(callback.message, callback)
+
+@router.message(F.text == "/subscribe")
+async def subscribe_handler_command(message: types.Message) -> None:
+    await _show_subscribe_menu(message)
+
+async def _show_subscribe_menu(message: types.Message, callback: types.CallbackQuery = None) -> None:
     """Показывает список тарифов или сообщение об их отсутствии."""
     async with get_session() as session:
         tariffs = await get_all_tariffs(session)
@@ -51,23 +58,28 @@ async def subscribe_handler(callback: types.CallbackQuery) -> None:
         kb = InlineKeyboardBuilder()
         kb.button(text="⬅️ Назад", callback_data="profile")
         with suppress(TelegramAPIError):
-            await callback.message.edit_text(
+            await message.edit_text(
                 "Пока нет доступных тарифов.",
                 reply_markup=kb.as_markup(),
                 parse_mode=PARSE_MODE,
             )
-        await callback.answer()
+        if callback:
+            await callback.answer()
         return
 
     new_text = SUBSCRIBE_HEADER
-    # Без лишних логов (по требованию) — только успешные платежи/ошибки будут логироваться в другом хендлере
-    with suppress(TelegramAPIError):  # игнорирует 'message is not modified'
-        await callback.message.edit_text(
+    if isinstance(message, types.Message):
+        send = message.answer
+    else:
+        send = message.edit_text
+    with suppress(TelegramAPIError):
+        await send(
             new_text,
             reply_markup=_build_tariffs_keyboard(tariffs),
             parse_mode=PARSE_MODE,
         )
-    await callback.answer()
+    if callback:
+        await callback.answer()
 
 
 @router.callback_query(F.data.startswith(BUY_PREFIX))

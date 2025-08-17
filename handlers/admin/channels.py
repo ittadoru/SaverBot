@@ -2,6 +2,9 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
+from sqlalchemy.exc import ProgrammingError
+from states.channels import ChannelStates
+from aiogram.fsm.context import FSMContext
 
 from config import ADMINS
 from db.base import get_session
@@ -14,7 +17,6 @@ from db.channels import (
     is_channel_guard_enabled,
     toggle_channel_guard,
 )
-from sqlalchemy.exc import ProgrammingError
 
 router = Router()
 router.message.filter(F.from_user.id.in_(ADMINS))
@@ -44,8 +46,7 @@ def _channels_menu_kb(channels, guard_on: bool):
     b = InlineKeyboardBuilder()
     for ch in channels:
         b.row(
-            InlineKeyboardButton(text=f"@{ch.username}", callback_data=f"ch_toggle_req:{ch.id}"),
-            InlineKeyboardButton(text=("REQ" if ch.is_required else "opt"), callback_data=f"ch_toggle_req:{ch.id}"),
+            InlineKeyboardButton(text=f"@{ch.username}", callback_data=f"noop"),
             InlineKeyboardButton(text=("ON" if ch.active else "OFF"), callback_data=f"ch_toggle_act:{ch.id}"),
             InlineKeyboardButton(text="✖", callback_data=f"ch_del:{ch.id}"),
         )
@@ -119,10 +120,27 @@ async def toggle_guard(callback: CallbackQuery):
 
 
 # --- Add channel flow ---
+
 @router.callback_query(F.data == "ch_add_start")
-async def add_start(callback: CallbackQuery, state):  # state FSM optional later
-    await callback.message.edit_text(
+async def add_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(
         "Введите @username канала (перешлите сообщение из него — пока поддерживаем только @username):\n⬅️ /cancel для отмены"
     )
+    await state.set_state(ChannelStates.waiting_for_username)
     await callback.answer()
-    # Здесь можно поставить FSM состояние, но сейчас опустим (требует states). Placeholder.
+
+
+# Обработчик текстового сообщения для добавления канала
+@router.message(ChannelStates.waiting_for_username)
+async def process_channel_username(message: Message, state: FSMContext):
+    username = message.text.strip().lstrip("@")
+    if not username.isalnum():
+        await message.answer("Некорректный username. Введите ещё раз или /cancel для отмены.")
+        return
+    async with get_session() as session:
+        try:
+            await add_channel(session, username)
+            await message.answer(f"Канал @{username} добавлен.")
+        except Exception as e:
+            await message.answer(f"Ошибка при добавлении: {e}")
+    await state.clear()

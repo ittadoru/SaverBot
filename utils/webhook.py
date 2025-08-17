@@ -15,7 +15,6 @@ from utils import payment
 from db.base import get_session
 from db.subscribers import add_subscriber_with_duration, get_subscriber_expiry
 from db.tariff import get_tariff_by_id, Tariff  # предполагается, что Tariff доступен
-from utils import logger as log  # существующая обертка логирования
 
 logger = logging.getLogger(__name__)
 
@@ -62,23 +61,19 @@ async def _notify_user_and_show_keys(user_id: int, bot: Bot, request: web.Reques
 
 async def _log_transaction(bot: Bot, user_id: int, tariff_name: str, tariff_price: float, support_chat_id: int) -> None:
     """Отправляет административный лог об оплате."""
-    try:
-        text = (
-            f"💳 Оплата\n\n"
-            f"👤 Пользователь: <a href='tg://user?id={user_id}'>Пользователь {user_id}</a>\n"
-            f"💳 Тариф: «{tariff_name}»\n"
-            f"💰 Сумма: {tariff_price} RUB"
-        )
+    text = (
+        f"💳 Оплата\n\n"
+        f"👤 Пользователь: <a href='tg://user?id={user_id}'>Пользователь {user_id}</a>\n"
+        f"💳 Тариф: «{tariff_name}»\n"
+        f"💰 Сумма: {tariff_price} RUB"
+    )
 
-        await bot.send_message(
-            chat_id=support_chat_id,
-            text=text
-        )
+    await bot.send_message(
+        chat_id=support_chat_id,
+        text=text
+    )
 
-        log.log_message(f"Лог транзакции отправлен для пользователя {user_id}.", emoji="✅", log_level="info")
-
-    except Exception:
-        logger.exception("Не удалось отправить лог транзакции user_id=%s", user_id)
+    logger.info("Лог транзакции отправлен для пользователя %s. ✅", user_id)
 
 
 async def yookassa_webhook_handler(request: web.Request) -> web.Response:
@@ -128,10 +123,3 @@ async def yookassa_webhook_handler(request: web.Request) -> web.Response:
 
     logger.info("WEBHOOK: completed user_id=%s tariff=%s", user_id, tariff_id)
     return web.Response(status=200)
-
-    # NOTE: идемпотентность повторных webhook не реализована (см. TODO при расширении)
-    # TODO: добавить проверку по payment_id для исключения двойного продления.
-    # (оставлено вне выбранного набора изменений)
-
-    # --- Ошибки ---
-    # Общий перехват вынесен выше; дополнительные except не требуются

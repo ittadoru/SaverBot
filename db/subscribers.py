@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    BigInteger,
     String,
     UniqueConstraint,
     delete,
@@ -19,7 +20,7 @@ from db.base import Base
 
 class Subscriber(Base):
     __tablename__ = 'subscribers'
-    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
+    user_id = Column(BigInteger, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True)
     expire_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -29,7 +30,7 @@ class ProcessedPayment(Base):
     __tablename__ = 'processed_payments'
     id = Column(Integer, primary_key=True, autoincrement=True)
     payment_id = Column(String(100), nullable=False, unique=True)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (
         UniqueConstraint('payment_id', name='uq_processed_payment_payment_id'),

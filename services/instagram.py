@@ -5,8 +5,7 @@ import asyncio
 import time
 import yt_dlp
 from config import DOWNLOAD_DIR
-from utils import yt_dlp_logger as yt
-from utils.logger import get_logger
+from utils.logger import get_logger, YTDlpLoggerAdapter
 
 logger = get_logger(__name__, platform="instagram")
 
@@ -23,7 +22,7 @@ class InstagramDownloader(BaseDownloader):
             'outtmpl': filename,
             'merge_output_format': 'mp4',
             'quiet': False,
-            'logger': yt.YTDlpLoggerAdapter(),
+            'logger': YTDlpLoggerAdapter(),
             'retries': 10,
             'fragment_retries': 10,
             'socket_timeout': 30,

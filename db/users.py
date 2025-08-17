@@ -2,7 +2,7 @@
 
 import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Boolean, func, select
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, BigInteger, String, Boolean, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 
@@ -13,7 +13,7 @@ from db.subscribers import Subscriber
 class User(Base):
     """Представляет пользователя бота."""
     __tablename__ = 'users'
-    id = Column(Integer, primary_key=True, autoincrement=False)
+    id = Column(BigInteger, primary_key=True, autoincrement=False)
     first_name = Column(String, nullable=True)
     username = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -28,7 +28,7 @@ class UserActivity(Base):
     """Фиксирует временные метки активности пользователя."""
     __tablename__ = 'user_activity'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False)
     activity_date = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="activities")

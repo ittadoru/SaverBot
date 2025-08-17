@@ -1,6 +1,8 @@
 import os
 import asyncio
-from utils import logger as log
+import logging
+
+logger = logging.getLogger(__name__)
 
 async def remove_file_later(path: str, delay: int, message=None):
     """Удаляет файл через указанную задержку (сек)."""
@@ -8,6 +10,6 @@ async def remove_file_later(path: str, delay: int, message=None):
         await asyncio.sleep(delay)
         if os.path.exists(path):
             os.remove(path)
-            log.log_message(f"Файл удалён: {path}", emoji="🗑")
-    except Exception as e:
-        log.log_error(e, context=f"remove_file_later {path}")
+            logger.info("Файл удалён: %s 🗑", path)
+    except Exception:
+        logger.exception("remove_file_later %s", path)

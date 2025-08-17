@@ -67,20 +67,25 @@ async def _safe_delete(bot: Any, chat_id: int, message_id: int) -> None:
 
 @router.callback_query(F.data == "promo")
 async def promo_start(callback: types.CallbackQuery, state: FSMContext) -> None:
-    """Начало ввода промокода. Не дублирует приглашение, если уже ждём код."""
-    current_state = await state.get_state()
-    if current_state == PromoStates.user:
-        await callback.answer("Уже жду промокод…")
-        return
-
-    prompt = await callback.message.answer(
-        "Пожалуйста, введите промокод для активации:", reply_markup=_prompt_keyboard()
-    )
-    await state.update_data(last_bot_message_id=prompt.message_id, last_code=None)
-    await state.set_state(PromoStates.user)
+    await _show_promo_prompt(callback.message, state)
     await callback.answer()
     logger.debug("Старт ввода промокода user_id=%d", callback.from_user.id)
 
+@router.message(F.text == "/promocode")
+async def promo_command(message: types.Message, state: FSMContext) -> None:
+    await _show_promo_prompt(message, state)
+
+# --- Универсальный запуск промокода (и с кнопки, и с команды) ---
+async def _show_promo_prompt(message: types.Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state == PromoStates.user:
+        await message.answer("Уже жду промокод…")
+        return
+    prompt = await message.answer(
+        "🎟 Пожалуйста, введите промокод для активации:", reply_markup=_prompt_keyboard()
+    )
+    await state.update_data(last_bot_message_id=prompt.message_id, last_code=None)
+    await state.set_state(PromoStates.user)
 
 @router.callback_query(F.data == "promo_cancel")
 async def promo_cancel(callback: types.CallbackQuery, state: FSMContext) -> None:

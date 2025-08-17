@@ -7,6 +7,8 @@ from aiogram.types import CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 from db.base import get_session
 from db.subscribers import get_subscriber_expiry
+from db.downloads import get_total_downloads, get_daily_downloads
+from db.platforms import get_platform_counts, PLATFORMS
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +35,22 @@ def _format_subscription_status(expire_at: datetime | None) -> str:
     return "❌ Подписка истекла"
 
 
-def _build_profile_text(user_id: int, name: str, username: str, status: str) -> str:
-    """Формирует текст профиля."""
+def _build_profile_text(user_id: int, name: str, username: str, status: str, total: int, today: int, left: int, platform_stats: dict) -> str:
     username_part = f"@{username}" if username else "—"
-    return (
-        "<b>👤 Пользователь:</b>\n\n"
+    stats = (
+        f"<b>👤 Пользователь:</b>\n\n"
         f"ID: <code>{user_id}</code>\n"
         f"Имя: {name}\n"
         f"{status}\n"
-        f"Username: {username_part}\n"
+        f"Username: {username_part}\n\n"
+        f"<b>Ваша статистика:</b>\n"
+        f"  • Всего скачиваний: <b>{total}</b>\n"
+        f"  • Сегодня: <b>{today}</b> (осталось: <b>{left}</b>)\n"
     )
+    stats += "  • По платформам:\n"
+    for p in PLATFORMS:
+        stats += f"    {p.title()}: <b>{platform_stats.get(p, 0)}</b>\n"
+    return stats
 
 
 @router.callback_query(lambda c: c.data == "myprofile")
@@ -55,10 +63,13 @@ async def show_profile(callback: CallbackQuery) -> None:
 
     async with get_session() as session:
         expire_at = await get_subscriber_expiry(session, user_id)
+        total = await get_total_downloads(session, user_id)
+        today = await get_daily_downloads(session, user_id)
+        platform_stats = await get_platform_counts(session, user_id)
+    left = max(0, 20 - today)
     status = _format_subscription_status(expire_at)
-    text = _build_profile_text(user_id, name, username, status)
+    text = _build_profile_text(user_id, name, username, status, total, today, left, platform_stats)
 
-    # Если текст уже такой же — не редактируем (чтобы не ловить ошибку)
     current = (callback.message.text or "").strip()
     if current == text.strip():
         await callback.answer()
@@ -76,7 +87,6 @@ async def show_profile(callback: CallbackQuery) -> None:
                 "Подавлена ошибка 'message is not modified' (user_id=%d)", user_id
             )
             return
-        # На другие ошибки пусть видно в логах
         logger.exception("Не удалось обновить профиль user_id=%d", user_id)
         raise
 

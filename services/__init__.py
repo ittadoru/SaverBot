@@ -15,6 +15,6 @@ def get_downloader(url: str):
         case "instagram":
             return InstagramDownloader()
         case _:
-            log.log_message(
+            log.info(
                 "Эта платформа не поддерживается", emoji="⛔️", log_level="error"
             )

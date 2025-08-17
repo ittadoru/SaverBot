@@ -39,7 +39,6 @@ async def show_promo_menu(callback: CallbackQuery):
 
 
 # --- Добавление промокода ---
-
 @router.callback_query(F.data == "add_promocode")
 async def add_promocode_start(callback: CallbackQuery, state: FSMContext):
     """Запускает процесс добавления нового промокода."""

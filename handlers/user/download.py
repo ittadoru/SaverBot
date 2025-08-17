@@ -1,8 +1,12 @@
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+import aiogram.utils.markdown as markdown
+
 import asyncio
 import os
+
 from utils.platform_detect import detect_platform
 from utils.video_utils import get_video_resolution
 from utils.send import send_video, send_audio
@@ -12,6 +16,7 @@ from utils import logger as log
 from db.base import get_session
 from db.subscribers import is_subscriber
 from db.users import log_user_activity, add_or_update_user
+from db.channels import is_channel_guard_enabled, get_required_active_channels, check_user_memberships
 from db.downloads import get_daily_downloads, increment_daily_download, increment_download, add_download_link
 from db.platforms import increment_platform_download
 from config import PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
@@ -60,9 +65,29 @@ def _schedule_format_timeout(user_id: int, bot, chat_id: int):
 
 @router.message(F.text.regexp(r'https?://'))
 async def download_handler(message: types.Message, state: FSMContext):
+
     url = message.text.strip()
     user = message.from_user
     platform = detect_platform(url)
+
+    # --- Глобальное ограничение и подписка на каналы ---
+    async with get_session() as session:
+        guard_on = await is_channel_guard_enabled(session)
+        if guard_on:
+            required_channels = await get_required_active_channels(session)
+            if required_channels:
+                bot = message.bot
+                check_results = await check_user_memberships(bot, user.id, required_channels)
+                not_joined = [ch for ch, res in zip(required_channels, check_results) if not res.is_member]
+                if not_joined:
+                    text = "<b>Для скачивания необходимо подписаться на каналы:</b>\n\n"
+                    for ch in not_joined:
+                        link = markdown.hlink(f"@{ch.username}", f"https://t.me/{ch.username}")
+                        text += f"{link}\n"
+                    text += "\nПосле подписки — отправьте ссылку ещё раз."
+                    await message.answer(text, parse_mode="HTML")
+                    return
+
     # корректная проверка подписки (нужна сессия)
     if platform == 'youtube':
         async with get_session() as session:
@@ -79,14 +104,17 @@ async def download_handler(message: types.Message, state: FSMContext):
         await set_user_busy(user.id)
         await state.update_data({f'yt_url_{user.id}': url})
         _subscriber_selecting.add(user.id)
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='Видео 240p', callback_data='yt_download:video_240'),
-             InlineKeyboardButton(text='Видео 360p', callback_data='yt_download:video_360')],
-            [InlineKeyboardButton(text='Видео 480p', callback_data='yt_download:video_480'),
-             InlineKeyboardButton(text='Видео 720p', callback_data='yt_download:video_720')],
-            [InlineKeyboardButton(text='Скачать аудио', callback_data='yt_download:audio')]
-        ])
-        await message.answer('Выберите формат скачивания (3 мин)...', reply_markup=kb)
+        builder = InlineKeyboardBuilder()
+        builder.row(
+            InlineKeyboardButton(text='Видео 240p', callback_data='yt_download:video_240'),
+            InlineKeyboardButton(text='Видео 360p', callback_data='yt_download:video_360')
+        )
+        builder.row(
+            InlineKeyboardButton(text='Видео 480p', callback_data='yt_download:video_480'),
+            InlineKeyboardButton(text='Видео 720p', callback_data='yt_download:video_720')
+        )
+        builder.row(InlineKeyboardButton(text='Скачать аудио', callback_data='yt_download:audio'))
+        await message.answer('Выберите формат скачивания (3 мин)...', reply_markup=builder.as_markup())
         _schedule_format_timeout(user.id, message.bot, message.chat.id)
         return
 
@@ -135,10 +163,11 @@ async def process_download(message: types.Message, url: str, user_id: int, platf
                 normalized = _normalize_download_result(raw_result)
                 if isinstance(normalized, tuple) and normalized and normalized[0] == 'DENIED_SIZE':
                     size_mb = normalized[1]
-                    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='💳 Подписка', callback_data='subscribe:open')]])
+                    builder = InlineKeyboardBuilder()
+                    builder.button(text='💳 Подписка', callback_data='subscribe:open')
                     await message.answer(
                         f'🚫 Видео больше лимита {MAX_FREE_VIDEO_MB} МБ (это {size_mb} МБ) и недоступно бесплатно. Оформите подписку.',
-                        reply_markup=kb
+                        reply_markup=builder.as_markup()
                     )
                     return
                 file_path = normalized
@@ -153,7 +182,7 @@ async def process_download(message: types.Message, url: str, user_id: int, platf
             await log_user_activity(session, user_id)
             await increment_download(session, user_id)
             await increment_platform_download(session, user_id, platform)
-            await increment_daily_download(session, user_id)
+            await increment_daily_download(session, user_id)  # теперь всегда для всех
             await add_download_link(session, user_id, url)
     except Exception as e:  # noqa: BLE001
         log.log_error(f'Ошибка при скачивании: {e}')
@@ -164,6 +193,7 @@ async def process_download(message: types.Message, url: str, user_id: int, platf
             pass
     finally:
         await clear_user_busy(user_id)
+
 
 @router.callback_query(lambda c: c.data.startswith('yt_download:'))
 async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext):
@@ -201,10 +231,11 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
             normalized = _normalize_download_result(raw_result)
             if isinstance(normalized, tuple) and normalized and normalized[0] == 'DENIED_SIZE':
                 size_mb = normalized[1]
-                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='💳 Подписка', callback_data='subscribe:open')]])
+                builder = InlineKeyboardBuilder()
+                builder.button(text='💳 Подписка', callback_data='subscribe:open')
                 await callback.message.answer(
                     f'🚫 Видео больше лимита {MAX_FREE_VIDEO_MB} МБ (это {size_mb} МБ) и недоступно бесплатно.',
-                    reply_markup=kb
+                    reply_markup=builder.as_markup()
                 )
                 return
             path = normalized
@@ -219,6 +250,7 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
             await log_user_activity(session, user.id)
             await increment_download(session, user.id)
             await increment_platform_download(session, user.id, 'youtube')
+            await increment_daily_download(session, user.id)  # теперь всегда для всех
             await add_download_link(session, user.id, url)
     except Exception as e:  # noqa: BLE001
         log.log_error(f'Ошибка: {e}')

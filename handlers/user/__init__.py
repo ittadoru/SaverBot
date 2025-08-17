@@ -5,7 +5,7 @@ from .subscribe import router as subscribe_router
 from .myprofile import router as myprofile_router
 from .menu import router as menu_router
 from .download import router as download_router
-
+from .myhistory import router as myhistory_router
 
 routers = [
     about_router,
@@ -14,5 +14,6 @@ routers = [
     subscribe_router,
     myprofile_router,
     menu_router,
-    download_router
+    download_router,
+    myhistory_router
 ]

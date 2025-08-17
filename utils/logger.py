@@ -54,7 +54,27 @@ class TelegramErrorHandler(logging.Handler):
                 f"Не удалось отправить лог ошибки в Telegram: {e}"
             )
 
+class YTDlpLoggerAdapter:
+    """Минимальный адаптер: убран вывод прогресса и процентов.
 
+    Только пробрасывает info/warning/error. debug подавляется, чтобы не засорять логи.
+    Если понадобится вернуть прогресс — его можно восстановить из git истории.
+    """
+    def __init__(self):
+        self._logger = get_logger("yt_dlp")
+
+    def info(self, msg):
+        return
+    
+    def warning(self, msg):
+        return
+
+    def error(self, msg):
+        self._logger.error("[YTDLP] %s", msg)
+
+    def debug(self, msg):
+        return
+    
 def custom_rotator(source, dest):
     """Переименовывает архивные логи в формат bot_YYYY-MM-DD.log."""
     dirname, basename = os.path.split(dest)

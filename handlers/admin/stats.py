@@ -8,10 +8,15 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 
 from db.base import get_session
 from db.promocodes import get_active_promocodes_count
-from db.subscribers import (get_subscriptions_count_for_period,
-                            get_total_subscribers)
-from db.users import (get_active_users_today,
-                      get_new_users_count_for_period, get_total_users)
+from db.subscribers import (
+    get_subscriptions_count_for_period,
+    get_total_subscribers,
+)
+from db.users import (
+    get_active_users_today,
+    get_new_users_count_for_period, get_total_users
+)
+from db.platforms import get_top_platform_downloads
 
 router = Router()
 
@@ -39,6 +44,9 @@ async def handle_stats(callback: CallbackQuery):
             subs_week = await get_subscriptions_count_for_period(session, days=7)
             subs_month = await get_subscriptions_count_for_period(session, days=30)
 
+            # --- Топ скачиваний по платформам ---
+            top_downloads = await get_top_platform_downloads(session)
+
     except Exception as e:
         logging.error(f"Ошибка при получении статистики: {e}", exc_info=True)
         await callback.answer(
@@ -65,8 +73,16 @@ async def handle_stats(callback: CallbackQuery):
         f"<b><u>Динамика подписок (новых/продлений):</u></b>\n"
         f"  📈 За 24 часа: <b>{subs_today}</b>\n"
         f"  📈 За 7 дней: <b>{subs_week}</b>\n"
-        f"  📈 За 30 дней: <b>{subs_month}</b>\n"
+        f"  📈 За 30 дней: <b>{subs_month}</b>\n\n"
     )
+
+    # --- Топ скачиваний по платформам ---
+    def format_top(platform, count):
+        return f"<b>{platform.title()}:</b> <b>{count}</b>"
+
+    text += "<b><u>Топ скачиваний по платформам:</u></b>\n"
+    for platform in ["youtube", "tiktok", "instagram"]:
+        text += format_top(platform, top_downloads.get(platform, 0)) + "\n"
 
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))

@@ -1,14 +1,15 @@
 import os
 import asyncio
-
+import logging
 from aiogram import Bot, types
 from aiogram.types import FSInputFile
-
-from utils import logger as log
 from utils.file_cleanup import remove_file_later
 from db.subscribers import is_subscriber as db_is_subscriber
 from db.base import get_session
 from config import DOMAIN
+
+logger = logging.getLogger(__name__)
+
 
 async def send_video(
     bot: Bot,
@@ -27,8 +28,7 @@ async def send_video(
     """
  
     file_size = os.path.getsize(file_path)
-    # 1) Если файл нельзя загрузить напрямую из-за лимита Telegram API, отправляем ссылку.
-    TELEGRAM_LIMIT_MB = 49  # технический лимит Bot API на прямую отправку файла
+    TELEGRAM_LIMIT_MB = 49
     if file_size > TELEGRAM_LIMIT_MB * 1024 * 1024:
         file_name = os.path.basename(file_path)
         link = f"{DOMAIN}/video/{file_name}"
@@ -71,7 +71,7 @@ async def send_video(
         # Удаляем файл спустя 10 секунд после отправки
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
 
-    log.log_message("[SEND] Отправка завершена", emoji="✅")
+    logger.info("[SEND] Отправка завершена ✅")
 
 
 async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: str):
@@ -79,8 +79,8 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
     Отправляет аудио в чат с подписью.
     Файл удаляется через 10 секунд после отправки.
     """
-    log.log_message("[SEND] Отправка в Telegram", emoji="✉️")
-    log.log_message(f"Чат: {chat_id}", level=1)
+    logger.info("[SEND] Отправка в Telegram ✉️")
+    logger.info("Чат: %s", chat_id)
     me = await bot.get_me()
     await bot.send_audio(
         chat_id=chat_id,
@@ -91,4 +91,4 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
     # Удаляем файл спустя 10 секунд после отправки
     asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
 
-    log.log_message("[SEND] Отправка завершена", emoji="✅")
+    logger.info("[SEND] Отправка завершена ✅")

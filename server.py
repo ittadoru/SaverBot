@@ -34,7 +34,7 @@ class BotLogHandler(logging.Handler):  # type: ignore[misc]
         try:
             from utils import logger as tg_log  # локальный импорт чтобы избежать циклов
             msg = self.format(record)
-            tg_log.log_message(msg)
+            tg_log.info(msg)
         except Exception:  # noqa: BLE001 - не роняем из-за handler
             pass
 
