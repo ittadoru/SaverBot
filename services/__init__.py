@@ -1,4 +1,4 @@
-from .youtube.yt_dlp_downloader import YTDLPDownloader
+from .youtube import YTDLPDownloader
 from .tiktok import TikTokDownloader
 from .instagram import InstagramDownloader
 from utils.platform_detect import detect_platform

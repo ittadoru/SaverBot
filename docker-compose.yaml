@@ -1,41 +1,64 @@
-version: '3.9'
-
 services:
-  nginx:
-    image: nginx:1.25
-    container_name: nginx
+  postgres:
+    image: postgres:16
     restart: always
-    ports:
-      - "8008:80"
-      - "8443:443"
+    env_file: [.env]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?must-set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must-set}
+      POSTGRES_DB: ${POSTGRES_DB:?must-set}
+    ports: ["5432:5432"]
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - app
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
-  redis:
-    image: redis:7
-    container_name: redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
-
-  app:
+  bot:
     build: .
-    image: ittadoru/saverbot:latest
-    container_name: app
+    image: saverbot-app
     restart: always
-    volumes:
-      - ./.env:/app/.env:ro
+    env_file: [.env]
+    working_dir: /app
+    volumes: [ .:/app ]
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
     command: >
-      bash -c "uvicorn server:app --host 0.0.0.0 --port 8000 & python bot.py"
+      bash -c "
+        echo 'Running migrations (bot)...';
+        if ls alembic/versions/*.py 1>/dev/null 2>&1; then
+          alembic upgrade head || { echo 'Alembic failed'; exit 1; }
+        else
+          python scripts/ensure_schema.py || { echo 'ensure_schema failed'; exit 1; }
+        fi;
+        watchfiles --filter python 'python bot.py'
+      "
+
+  api:
+    image: saverbot-app
+    restart: always
+    env_file: [.env]
+    working_dir: /app
+    ports: ["8000:8000"]
+    volumes: [ .:/app ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bot:
+        condition: service_started
+    command: >
+      bash -c "
+        echo 'Ensuring schema (api)...';
+        if ls alembic/versions/*.py 1>/dev/null 2>&1; then
+          echo 'Revisions present (already migrated by bot).';
+        else
+          python scripts/ensure_schema.py || true
+        fi;
+        uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+      "
 
 volumes:
-  redis_data:
+  pgdata:

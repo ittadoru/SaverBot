@@ -1,18 +1,22 @@
 from .base import BaseDownloader
-import yt_dlp
 import os
 import uuid
-from config import DOWNLOAD_DIR, ADMIN_ERROR
-from utils import yt_dlp_logger as yt, logger as log
+import asyncio
+import time
+import yt_dlp
+from config import DOWNLOAD_DIR
+from utils import yt_dlp_logger as yt
+from utils.logger import get_logger
+
+logger = get_logger(__name__, platform="instagram")
 
 
 class InstagramDownloader(BaseDownloader):
-    async def download(self, url: str, message) -> str:
-        """
-        Загрузка видео с Instagram с помощью yt-dlp.
-        """
+    async def download(self, url: str, message, user_id: int | None = None) -> str | None:
+        """Загрузка видео с Instagram с помощью yt-dlp. Возвращает путь к файлу или None при AGE_RESTRICTED."""
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
-        log.log_download_start(url)  # Логируем начало загрузки
+        logger.info("⏬ [DOWNLOAD] start url=%s", url)
+        loop = asyncio.get_running_loop()
 
         ydl_opts = {
             'format': 'mp4',
@@ -28,47 +32,35 @@ class InstagramDownloader(BaseDownloader):
             'tls_verify': False,
         }
 
-        import asyncio
-        import time
-
-        loop = asyncio.get_running_loop()
-
         def run_download_with_retries():
             max_attempts = 3
             username = None
-            if hasattr(message, 'from_user') and hasattr(message.from_user, 'username'):
+            if hasattr(message, 'from_user') and getattr(message.from_user, 'username', None):
                 username = message.from_user.username
             elif hasattr(message, 'username'):
-                username = message.username
+                username = getattr(message, 'username', None)
             elif isinstance(message, int):
                 username = f'user_id={message}'
             for attempt in range(1, max_attempts + 1):
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([url])
-                    return  # Загрузка прошла успешно
-                except yt_dlp.utils.DownloadError as e:
+                    return None
+                except yt_dlp.utils.DownloadError as e:  # noqa: PERF203
                     err_str = str(e)
-                    # Проверка на age-restricted/18+ видео
-                    if any(x in err_str.lower() for x in ["18 years old", "age-restricted", "login required", "restricted video"]):
-                        log.log_message(f"[AGE-RESTRICTED] Видео с ограничением: {url} (user: {username})", log_level="warning")
-                        # Сообщение пользователю, если возможно
-                        if hasattr(message, 'answer'):
-                            import asyncio
-                            asyncio.run(message.answer("🚫 Это видео недоступно для скачивания, так как имеет возрастные ограничения или требует авторизации в Instagram."))
+                    if any(x in err_str.lower() for x in ("18 years old", "age-restricted", "login required", "restricted video")):
+                        logger.warning("AGE_RESTRICTED url=%s user=%s", url, username)
                         return "AGE_RESTRICTED"
-                    log.log_error(f"❌ Ошибка yt-dlp (попытка {attempt}/{max_attempts}): {e}", username)
-                except Exception as e:
-                    log.log_error(f"❌ Непредвиденная ошибка (попытка {attempt}/{max_attempts}): {e}", username)
-
+                    logger.error("yt-dlp error attempt=%s/%s err=%s", attempt, max_attempts, e)
+                except Exception:  # noqa: BLE001
+                    logger.exception("unexpected error attempt=%s/%s", attempt, max_attempts)
                 if attempt < max_attempts:
-                    time.sleep(5)  # Ждем перед повторной попыткой
+                    time.sleep(5)
                 else:
-                    raise Exception("🚫 Все попытки загрузки не удались")
+                    raise Exception("all attempts failed")
 
         result = await loop.run_in_executor(None, run_download_with_retries)
         if result == "AGE_RESTRICTED":
             return None
-        # Ошибки
-        log.log_download_complete(filename)  # Логируем успешное завершение
+        logger.info("✅ [DOWNLOAD] done file=%s", filename)
         return filename

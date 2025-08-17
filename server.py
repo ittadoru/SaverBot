@@ -1,169 +1,162 @@
-import asyncio
-import os
-import traceback
+"""Webhook сервер FastAPI для обработки уведомлений об оплате и запуска бота."""
+
+from __future__ import annotations
+
 import logging
+from datetime import datetime, timedelta, timezone
+from json import JSONDecodeError
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
-from aiogram import types, Bot
+from fastapi.responses import JSONResponse
+from aiogram import Bot
 
-from redis_db import r
-from redis_db.subscribers import add_subscriber_with_duration
-from redis_db.tariff import get_tariff_by_id
-from utils import logger as log
-from config import ADMIN_ERROR, BOT_TOKEN, SUPPORT_GROUP_ID, SUBSCRIBE_TOPIC_ID
-from fastapi.templating import Jinja2Templates
-from pathlib import Path
+from db.base import get_session  # (13) убрали динамический импорт
+from db.subscribers import (
+    add_subscriber_with_duration,
+    is_payment_processed,
+    mark_payment_processed,
+)
+from db.users import mark_user_has_paid
+from db.tariff import get_tariff_by_id
+from config import BOT_TOKEN, SUPPORT_GROUP_ID, SUBSCRIBE_TOPIC_ID, PRIMARY_ADMIN_ID
 
+logger = logging.getLogger(__name__)  # (12) стандартный логгер вместо custom wrapper
 
-BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
 app = FastAPI()
 
-class BotLogHandler(logging.Handler):
-    def emit(self, record):
-        msg = self.format(record)
-        log.log_message(msg)  # или log.log_error(msg) для ошибок
 
-# Перехват стандартных логов FastAPI/Uvicorn
+# ---------------------------- Логирование Uvicorn ---------------------------
+class BotLogHandler(logging.Handler):  # type: ignore[misc]
+    """Handler, перенаправляющий логи в Telegram через существующий механизм."""
+
+    def emit(self, record: logging.LogRecord) -> None:  # (2) типизация
+        try:
+            from utils import logger as tg_log  # локальный импорт чтобы избежать циклов
+            msg = self.format(record)
+            tg_log.log_message(msg)
+        except Exception:  # noqa: BLE001 - не роняем из-за handler
+            pass
+
+
 logging.getLogger("uvicorn.access").handlers = [BotLogHandler()]
 logging.getLogger("uvicorn.error").handlers = [BotLogHandler()]
 logging.getLogger("fastapi").handlers = [BotLogHandler()]
 
+
+# Idempotency теперь в БД (processed_payments)
+
+
+# ------------------------------- Utilities ----------------------------------
+def _calc_expiry(days: int) -> datetime:
+    """Возвращает дату окончания (UTC) (8)."""
+    return datetime.now(timezone.utc) + timedelta(days=days)
+
+
+# ------------------------------- Webhook ------------------------------------
 @app.post("/yookassa")
-async def yookassa_webhook(request: Request):
-    """
-    Обрабатывает вебхуки от YooKassa.
-    При успешной оплате начисляет дни подписки пользователю.
-    """
+async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
+    """Обработка webhook YooKassa (без логирования raw JSON) (1,16)."""
     bot: Bot = app.state.bot
-    r = app.state.redis
+    admin_errors: list[str] = []  # (15) агрегируем ошибки
 
     try:
-        data = await request.json()
-    except Exception as e:
-        log.log_message(f"Ошибка парсинга JSON: {e}", log_level="error", emoji="⚠️")
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        data: dict[str, Any] = await request.json()
+    except JSONDecodeError as e:  # (6) узкий except
+        logger.error("Invalid JSON: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid JSON") from e
+    except Exception as e:  # fallback
+        logger.exception("JSON parse failure")
+        raise HTTPException(status_code=400, detail="Invalid body") from e
 
-    # Корректная обработка webhook: начисляем дни по тарифу, а не по сумме оплаты
+    # Извлекаем безопасно нужные поля (6)
     try:
-        payment_status = data["object"]["status"]
-        user_id_str = data["object"]["metadata"]["user_id"]
-        tariff_id_str = data["object"]["metadata"]["tariff_id"]
+        obj = data["object"]
+        payment_status: str = obj["status"]
+        metadata = obj["metadata"]
+        user_id = int(metadata["user_id"])  # (2)
+        tariff_id = int(metadata["tariff_id"])
+        payment_id: str = obj.get("id", "")
+    except KeyError as e:
+        logger.error("Missing key in webhook: %s", e)
+        raise HTTPException(status_code=400, detail="Missing key") from e
+    except ValueError as e:  # (6) конвертация в int
+        logger.error("Invalid int field: %s", e)
+        raise HTTPException(status_code=400, detail="Bad number") from e
 
-        user_id = int(user_id_str)
-        tariff_id = int(tariff_id_str)
-    except (KeyError, ValueError) as e:
-        log.log_message(f"Ошибка данных webhook: {e}", log_level="error", emoji="❌")
-        raise HTTPException(status_code=400, detail="Invalid data")
+    # Idempotency через БД
+    if payment_id:
+        async with get_session() as session:
+            if await is_payment_processed(session, payment_id):
+                logger.info("Duplicate webhook ignored payment_id=%s user_id=%s", payment_id, user_id)
+                return JSONResponse(content={"status": "ok", "duplicate": True})
 
-    if payment_status == "succeeded":
+    if payment_status == "succeeded":  # сохранили прежнюю проверку статуса
+        days = 0
         try:
-            tariff = await get_tariff_by_id(tariff_id)
-            days = tariff.duration_days
-        except Exception as e:
-            log.log_message(f"Ошибка получения тарифа: {e}", log_level="error", emoji="❌")
-            raise HTTPException(status_code=400, detail="Tariff error")
+            async with get_session() as session:
+                # Повторная проверка idempotency (гонка между процессами)
+                if payment_id and await is_payment_processed(session, payment_id):
+                    logger.info("Duplicate (race) webhook ignored payment_id=%s user_id=%s", payment_id, user_id)
+                    return JSONResponse(content={"status": "ok", "duplicate": True})
+                tariff = await get_tariff_by_id(session, tariff_id)
+                days = tariff.duration_days  # type: ignore[assignment]
+                await add_subscriber_with_duration(session, user_id, days)
+                await mark_payment_processed(session, payment_id, user_id)
+                await mark_user_has_paid(session, user_id)
+                logger.info("Subscription extended user_id=%s days=%s tariff_id=%s", user_id, days, tariff_id)
+        except Exception as e:  # (6)
+            admin_errors.append(f"Tariff/subscription error: {e}")
+            logger.exception("Tariff handling failed user_id=%s tariff_id=%s", user_id, tariff_id)
+            raise HTTPException(status_code=400, detail="Tariff error") from e
 
-        await add_subscriber_with_duration(user_id, days)
-        log.log_message(f"Подписка продлена для user_id={user_id} на {days} дней", emoji="✅")
-
+        # Уведомления пользователя и группы
         try:
-            # Получаем данные пользователя
             user = await bot.get_chat(user_id)
-            username = f"@{user.username}" if user.username else "—"
-            full_name = user.full_name or user.first_name or "—"
-            # Дата окончания подписки
-            from datetime import datetime, timedelta
-            expire_date = datetime.now() + timedelta(days=days)
-            expire_str = expire_date.strftime('%d.%m.%Y')
+            username = f"@{user.username}" if getattr(user, "username", None) else "—"
+            full_name = getattr(user, "full_name", None) or getattr(user, "first_name", None) or "—"
+            expire_dt = _calc_expiry(days)
+            expire_str = expire_dt.strftime('%d.%m.%Y')  # локальный формат (8)
 
-            # Сообщение пользователю
             await bot.send_message(
                 user_id,
-                f"✅ Ваша подписка успешно оформлена и продлена на <b>{days} дней</b>!\n\n"
-                f"🏷️ Тариф: <b>{tariff.name}</b>\n"
-                f"📅 Действует до: <b>{expire_str}</b>"
-                , parse_mode="HTML"
+                (
+                    f"✅ Ваша подписка продлена на <b>{days} дней</b>!\n\n"
+                    f"🏷️ Тариф: <b>{getattr(tariff, 'name', '—')}</b>\n"
+                    f"📅 Действует до (UTC): <b>{expire_str}</b>"
+                ),
+                parse_mode="HTML",
             )
-            log.log_message(
-                f"Уведомление об успешной оплате отправлено пользователю {user_id}.",
-                emoji="📩", log_level="info"
-            )
-            # Красивое уведомление в группу
             await bot.send_message(
                 SUPPORT_GROUP_ID,
-                f"<b>💳 Новая оплата подписки!</b>\n\n"
-                f"👤 <b>Пользователь:</b> {full_name} ({username})\n"
-                f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
-                f"🏷️ <b>Тариф:</b> <b>{tariff.name}</b>\n"
-                f"⏳ <b>Дней:</b> <b>{days}</b>\n"
-                f"📅 <b>Действует до:</b> <b>{expire_str}</b>\n",
+                (
+                    f"<b>💳 Новая оплата</b>\n\n"
+                    f"👤 {full_name} ({username})\n"
+                    f"🆔 <code>{user_id}</code>\n"
+                    f"🏷️ {getattr(tariff, 'name', '—')}\n"
+                    f"⏳ {days} дн.\n"
+                    f"📅 До: {expire_str} (UTC)\n"
+                ),
                 parse_mode="HTML",
-                message_thread_id=SUBSCRIBE_TOPIC_ID
+                message_thread_id=SUBSCRIBE_TOPIC_ID,
             )
-        except Exception as e:
-            log.log_message(f"Ошибка отправки сообщения пользователю: {e}", log_level="error", emoji="⚠️")
+        except Exception as e:  # (6)
+            admin_errors.append(f"Notify error: {e}")
+            logger.exception("User/group notify failed user_id=%s", user_id)
+
+    # (15) Одно агрегированное сообщение админу при наличии ошибок
+    if admin_errors:
+        try:
+            await bot.send_message(PRIMARY_ADMIN_ID, "\n".join(admin_errors))
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to send admin aggregated error")
 
     return JSONResponse(content={"status": "ok"})
 
 
-@app.get("/video/{filename}")
-async def download_video(request: Request, filename: str):
-    """
-    Обработка HTTP GET запроса для скачивания видео по имени файла.
-    Возвращает видеофайл из папки downloads.
-    """
-    filepath = f"downloads/{filename}"
-    if not os.path.exists(filepath):
-        log.log_message(f"Файл не найден: {filepath}", log_level="error", emoji="❌")
-        return templates.TemplateResponse(
-            "video_not_found.html",
-            {"request": request},
-            status_code=404
-        )
-    log.log_message(f"Запрос на скачивание файла: {filepath}", emoji="📥")
-    return FileResponse(
-        path=filepath,
-        filename=filename,
-        media_type="video/mp4",
-    )
-
-async def remove_file_later(path: str, delay: int, message: types.Message):
-    """
-    Асинхронно удаляет файл спустя delay секунд.
-    При ошибке удаления логирует ошибку и отправляет сообщение администратору.
-    """
-    log.log_message(
-        f"[CLEANUP] Планируется удаление через {delay} секунд: {path}", emoji="⏳"
-    )
-    await asyncio.sleep(delay)
-    try:
-        os.remove(path)
-        log.log_cleanup_video(path)
-    except Exception as e:
-        error_text = f"Ошибка: {e}"
-        full_trace = traceback.format_exc()
-        log.log_error(error_text)
-        log.log_error(full_trace)
-
-        # Отправка сообщения админу об ошибке удаления файла
-        try:
-            await message.bot.send_message(
-                ADMIN_ERROR,
-                f"❗️Произошла ошибка:\n<pre>{error_text}</pre>\n<pre>{full_trace}</pre>",
-                parse_mode="HTML",
-            )
-        except Exception as send_err:
-            log.log_error(f"Не удалось отправить ошибку админу: {send_err}")
-
-
-
+# ------------------------------- Startup ------------------------------------
 @app.on_event("startup")
-async def on_startup():
-    """
-    Инициализация бота и Redis при запуске FastAPI-приложения.
-    """
-    log.log_message("Запуск FastAPI приложения", emoji="🚀")
+async def on_startup() -> None:  # (2)
+    """Инициализация бота."""
+    logger.info("FastAPI startup")
     app.state.bot = Bot(token=BOT_TOKEN)
-    app.state.redis = r

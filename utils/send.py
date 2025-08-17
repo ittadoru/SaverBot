@@ -5,9 +5,9 @@ from aiogram import Bot, types
 from aiogram.types import FSInputFile
 
 from utils import logger as log
-from redis_db.subscribers import is_subscriber
-from server import remove_file_later
-
+from utils.file_cleanup import remove_file_later
+from db.subscribers import is_subscriber as db_is_subscriber
+from db.base import get_session
 from config import DOMAIN
 
 async def send_video(
@@ -20,12 +20,16 @@ async def send_video(
     height: int,
 ):
     """
-    Отправляет видео в чат. Если файл больше 49 МБ, отправляет ссылку на скачивание.
-    Для подписчиков ссылка удаляется позже, для остальных — через 5 минут.
-    Для маленьких файлов видео отправляется напрямую с последующим удалением файла.
+    Отправка уже скачанного файла:
+    - Если превышает технический лимит Telegram (~49 МБ) -> даём ссылку.
+    - Иначе отправляем напрямую.об
+    Бизнес‑лимит (MAX_FREE_VIDEO_MB) теперь проверяется ДО скачивания в загрузчиках, чтобы не тратить ресурсы зря.
     """
  
-    if os.path.getsize(file_path) > 49 * 1024 * 1024:
+    file_size = os.path.getsize(file_path)
+    # 1) Если файл нельзя загрузить напрямую из-за лимита Telegram API, отправляем ссылку.
+    TELEGRAM_LIMIT_MB = 49  # технический лимит Bot API на прямую отправку файла
+    if file_size > TELEGRAM_LIMIT_MB * 1024 * 1024:
         file_name = os.path.basename(file_path)
         link = f"{DOMAIN}/video/{file_name}"
     
@@ -36,19 +40,22 @@ async def send_video(
             ]
         )
 
+        # Определяем статус подписки
+        async with get_session() as session:
+            sub = await db_is_subscriber(session, user_id)
+
         await bot.send_message(
             chat_id,
             text=(
-                "📥 Чтобы скачать видео размером более 50МБ, нажмите на кнопку ниже.\n\n"
-                "⏳ Видео удалится спустя 5 минут у обычных пользователей, у премиум — в разы позже."
+                f"📥 Файл больше технического лимита Telegram для бота (~{TELEGRAM_LIMIT_MB} МБ). Используйте ссылку ниже для скачивания.\n\n"
+                + ("⭐ У вас активна подписка — ссылка будет жить дольше." if sub else "⏳ Ссылка истечёт через 5 минут (у подписчиков — дольше).")
             ),
             reply_markup=keyboard
         )
 
-        if await is_subscriber(user_id):
-            asyncio.create_task(remove_file_later(file_path, delay=900, message=message))
-        else:
-            asyncio.create_task(remove_file_later(file_path, delay=300, message=message))
+        # Время жизни файла: подписчику дольше
+        delay = 900 if sub else 300
+        asyncio.create_task(remove_file_later(file_path, delay=delay, message=message))
     else:
         me = await bot.get_me()
         # Отправка видео напрямую через Telegram
@@ -64,7 +71,7 @@ async def send_video(
         # Удаляем файл спустя 10 секунд после отправки
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
 
-    log.log_send_complete()
+    log.log_message("[SEND] Отправка завершена", emoji="✅")
 
 
 async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: str):
@@ -72,7 +79,8 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
     Отправляет аудио в чат с подписью.
     Файл удаляется через 10 секунд после отправки.
     """
-    log.log_send_start(chat_id)
+    log.log_message("[SEND] Отправка в Telegram", emoji="✉️")
+    log.log_message(f"Чат: {chat_id}", level=1)
     me = await bot.get_me()
     await bot.send_audio(
         chat_id=chat_id,
@@ -83,4 +91,4 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
     # Удаляем файл спустя 10 секунд после отправки
     asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
 
-    log.log_send_complete()
+    log.log_message("[SEND] Отправка завершена", emoji="✅")

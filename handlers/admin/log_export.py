@@ -1,48 +1,110 @@
+"""Экспорт логов: список доступных файлов и отправка выбранного админу."""
+
+import logging
 import os
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, FSInputFile
-from aiogram.fsm.context import FSMContext
-from utils import logger as log
-from states.log_export import LogExport
+import re
+from aiogram import F, Router
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+LOG_DIR = "logs"
+
+
+class LogCallback(CallbackData, prefix="log_select"):
+    """Фабрика колбэков для выбора конкретного файла лога."""
+    filename: str
+
 
 router = Router()
 
 
-@router.callback_query(F.data == "last_logs")
-async def send_last_logs(callback: CallbackQuery):
-    """Отправка текущего файла логов (bot.log)."""
-    log_path = "logs/bot.log"
-    if os.path.exists(log_path):
-        file = FSInputFile(log_path)
-        log.log_message("Админ запросил последние логи", emoji="📄")
-        await callback.message.answer_document(file, caption="📄 Логи за последнее время")
-    else:
-        await callback.message.answer("Файл логов не найден.")
-    await callback.answer()
+def get_log_files():
+    """
+    Сканирует директорию логов и возвращает отсортированный список файлов.
+    Текущий лог 'bot.log' всегда первый, за ним идут архивные.
+    """
+    if not os.path.exists(LOG_DIR):
+        return []
 
+    files = os.listdir(LOG_DIR)
 
-@router.callback_query(F.data == "custom_logs")
-async def ask_date(callback: CallbackQuery, state: FSMContext):
-    """Запрос даты для выгрузки логов по дате."""
-    await callback.message.answer(
-        "Введите дату логов в формате `ГГГГ-ММ-ДД`, например: `2025-08-01`"
+    # Паттерн для архивных логов, создаваемых TimedRotatingFileHandler
+    # Например, 'bot.log.2023-10-27'
+    log_pattern = re.compile(r"^bot\.log\.(\d{4}-\d{2}-\d{2})$")
+
+    current_log = "bot.log"
+    archived_logs = sorted(
+        [f for f in files if log_pattern.match(f)],
+        reverse=True
     )
-    await state.set_state(LogExport.waiting_for_date)
+
+    # Формируем итоговый список
+    log_files = []
+    if current_log in files:
+        log_files.append(current_log)
+
+    log_files.extend(archived_logs)
+
+    return log_files
+
+
+@router.callback_query(F.data == "get_logs")
+async def show_log_menu(callback: CallbackQuery):
+    """
+    Показывает меню со всеми доступными файлами логов в виде единого списка.
+    """
+    log_files = get_log_files()
+
+    if not log_files:
+        await callback.answer("🗂️ Файлы логов не найдены.", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+
+    for filename in log_files:
+        # Для 'bot.log' показываем "Текущий", для остальных - дату
+        if filename == "bot.log":
+            display_name = "📄 Текущий лог"
+        else:
+            # Извлекаем дату из имени файла, например, '2023-10-27'
+            date_str = filename.replace("bot.log.", "")
+            display_name = f"📄 Архив {date_str}"
+
+        builder.button(
+            text=display_name,
+            callback_data=LogCallback(filename=filename).pack()
+        )
+
+    builder.adjust(2)  # По 2 кнопки в ряду
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
+
+    await callback.message.edit_text(
+        "Выберите файл логов для выгрузки:",
+        reply_markup=builder.as_markup()
+    )
     await callback.answer()
 
 
-@router.message(LogExport.waiting_for_date)
-async def send_logs_by_date(message: Message, state: FSMContext):
-    """Отправка логов за указанную пользователем дату."""
-    user_date = message.text.strip()
-    filename = f"logs/bot_{user_date}.log"
+@router.callback_query(LogCallback.filter())
+async def send_log_file(callback: CallbackQuery, callback_data: LogCallback):
+    """Отправляет выбранный файл логов администратору."""
+    filename = callback_data.filename
+    log_path = os.path.join(LOG_DIR, filename)
+    user_id = callback.from_user.id
 
-    if os.path.exists(filename):
-        file = FSInputFile(filename)
-        log.log_message(f"Админ запросил логи за {user_date}", emoji="📄")
-        await message.answer_document(file, caption=f"📄 Логи за {user_date}")
-    else:
-        log.log_error(f"Файл логов за {user_date} не найден")
-        await message.answer(f"Файл логов за {user_date} дату не найден.")
+    if not os.path.exists(log_path):
+        logging.warning(f"Админ {user_id} запросил несуществующий лог: {filename}")
+        await callback.answer(f"❗️ Файл логов '{filename}' не найден.", show_alert=True)
+        return
 
-    await state.clear()
+    if os.path.getsize(log_path) == 0:
+        logging.info(f"Админ {user_id} запросил пустой лог: {filename}")
+        await callback.answer(f"⚠️ Файл логов '{filename}' пуст.", show_alert=True)
+        return
+
+    logging.info(f"Админ {user_id} запросил лог: {filename}")
+
+    file = FSInputFile(log_path)
+    await callback.message.answer_document(file, caption=f"📄 Ваш файл логов: `{filename}`")
+    await callback.answer()

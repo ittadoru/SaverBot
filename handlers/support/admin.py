@@ -1,69 +1,99 @@
-from aiogram import Router, F, types
+"""Поддержка (админ): ответы в темах и закрытие тикетов."""
+
+import logging
+from typing import Optional
+
+from aiogram import F, Router
 from aiogram.types import Message
-from redis_db import r as redis
+
 from config import SUPPORT_GROUP_ID
-from utils.support_ticket import get_user_id_by_topic, get_ticket, close_ticket
-from utils import logger as log
+from db.base import get_session
+from db.support import SupportTicket, close_ticket, get_open_ticket_by_topic_id
+
+logger = logging.getLogger(__name__)
 
 router = Router()
+router.message.filter(F.chat.id == SUPPORT_GROUP_ID, F.is_topic_message)
 
 
-@router.message(F.chat.id == SUPPORT_GROUP_ID, F.is_topic_message)
-async def admin_reply(message: Message):
+@router.message(F.text.lower().in_(["/stop", "стоп", "закрыть"]))
+async def admin_close_ticket_handler(message: Message) -> None:
     """
-    Обрабатывает ответы админов в теме поддержки.
-    Пересылает текстовые и фото сообщения пользователю, если тикет открыт.
-    """
-    topic_id = message.message_thread_id
-    user_id = await get_user_id_by_topic(redis, topic_id)
-    if not user_id:
-        return
-
-    ticket = await get_ticket(redis, user_id)
-    if not ticket or ticket["status"] != "open":
-        await message.reply("Тикет уже закрыт.")
-        return
-
-    # Пересылаем текстовое сообщение пользователю
-    if message.text:
-        await message.bot.send_message(
-            user_id,
-            f"💬 Ответ поддержки:\n{message.text}"
-        )
-
-    # Пересылаем фото, если есть
-    if message.photo:
-        await message.bot.send_photo(
-            user_id,
-            message.photo[-1].file_id,
-            caption=f"💬 Ответ поддержки:\n{message.caption or ''}"
-        )
-
-    log.log_message(
-        f"👨‍💻 Админ ответил пользователю id={user_id} в тикете topic_id={topic_id}: "
-        f"{message.text or '[не текстовое сообщение]'}",
-        emoji="🛠️"
-    )
-
-    # TODO: Добавить обработку других типов сообщений (документы, аудио и т.п.) по необходимости
-
-
-@router.message(F.chat.id == SUPPORT_GROUP_ID, F.is_topic_message, F.text == "/stop")
-async def admin_close_ticket(message: Message):
-    """
-    Закрывает тикет по команде /stop от админа.
-    Отправляет пользователю уведомление о закрытии диалога.
+    Закрывает тикет по команде от администратора.
+    Уведомляет пользователя о закрытии диалога.
     """
     topic_id = message.message_thread_id
-    user_id = await get_user_id_by_topic(redis, topic_id)
-    if not user_id:
+    admin_id = message.from_user.id
+
+    async with get_session() as session:
+        ticket: Optional[SupportTicket] = await get_open_ticket_by_topic_id(
+            session, topic_id
+        )
+
+        if not ticket:
+            await message.reply("⚠️ Этот тикет уже закрыт.")
+            return
+
+        user_id = ticket.user_id
+        await close_ticket(session, user_id)
+
+        try:
+            await message.bot.send_message(
+                user_id, "❌ Администратор завершил диалог. Вы снова можете пользоваться ботом."
+            )
+        except Exception as e:
+            logger.error(
+                "Не удалось уведомить пользователя %d о закрытии тикета: %s",
+                user_id,
+                e,
+            )
+
+        await message.reply("✅ Диалог с пользователем закрыт.")
+        logger.info(
+            "Администратор %d закрыл тикет для пользователя %d (тема %d)",
+            admin_id,
+            user_id,
+            topic_id,
+        )
+
+
+@router.message()
+async def admin_reply_handler(message: Message) -> None:
+    """
+    Обрабатывает ответы администраторов в темах поддержки.
+    Пересылает сообщение пользователя, если тикет открыт.
+    """
+    if message.from_user.is_bot:
         return
 
-    ticket = await get_ticket(redis, user_id)
-    if ticket and ticket["status"] == "open":
-        await close_ticket(redis, user_id)
-        await message.bot.send_message(
-            user_id,
-            "❌ Администратор завершил диалог. Бот снова доступен для скачивания видео."
+    topic_id = message.message_thread_id
+    admin_id = message.from_user.id
+
+    async with get_session() as session:
+        ticket: Optional[SupportTicket] = await get_open_ticket_by_topic_id(
+            session, topic_id
         )
-        await message.reply("Диалог с пользователем закрыт.")
+
+        if not ticket:
+            await message.reply("⚠️ Этот тикет уже закрыт. Сообщение не доставлено.")
+            return
+
+        user_id = ticket.user_id
+        try:
+            await message.copy_to(
+                chat_id=user_id, caption=f"💬 Ответ поддержки:\n{message.caption or ''}"
+            )
+            logger.info(
+                "Администратор %d ответил пользователю %d в теме %d",
+                admin_id,
+                user_id,
+                topic_id,
+            )
+        except Exception as e:
+            logger.error(
+                "Не удалось доставить сообщение от администратора %d пользователю %d: %s",
+                admin_id,
+                user_id,
+                e,
+            )
+            await message.reply(f"❗️ Не удалось доставить сообщение пользователю. Ошибка: {e}")
