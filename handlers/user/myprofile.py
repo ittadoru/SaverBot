@@ -10,7 +10,7 @@ from db.subscribers import get_subscriber_expiry
 from db.downloads import get_total_downloads, get_daily_downloads
 from db.platforms import get_platform_counts, PLATFORMS
 from handlers.user.referral import get_referral_stats
-from db.users import User
+
 
 logger = logging.getLogger(__name__)
 

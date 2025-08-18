@@ -1,3 +1,4 @@
+
 """Webhook сервер FastAPI для обработки уведомлений об оплате и запуска бота."""
 
 from __future__ import annotations
@@ -8,8 +9,9 @@ from json import JSONDecodeError
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from aiogram import Bot
+import os
 
 from db.base import get_session  # (13) убрали динамический импорт
 from db.subscribers import (
@@ -21,10 +23,27 @@ from db.users import mark_user_has_paid
 from db.tariff import get_tariff_by_id
 from config import BOT_TOKEN, SUPPORT_GROUP_ID, SUBSCRIBE_TOPIC_ID, PRIMARY_ADMIN_ID
 
+
 logger = logging.getLogger(__name__)  # (12) стандартный логгер вместо custom wrapper
 
 app = FastAPI()
 
+def render_not_found_page():
+    try:
+        with open("templates/page_not_found.html", encoding="utf-8") as f:
+            html = f.read()
+    except Exception:
+        html = "<h1>404 Not Found</h1><p>Видео не найдено.</p>"
+    return HTMLResponse(content=html, status_code=404)
+
+# ------------------------------- Video File Serve ------------------------------------
+@app.get("/video/{name}.mp4")
+async def serve_video(name: str):
+    """Отдаёт mp4-файл из папки downloads по адресу /video/{name}.mp4"""
+    file_path = os.path.join("downloads", f"{name}.mp4")
+    if not os.path.isfile(file_path):
+        return render_not_found_page()
+    return FileResponse(file_path, media_type="video/mp4", filename=f"{name}.mp4")
 
 # ---------------------------- Логирование Uvicorn ---------------------------
 class BotLogHandler(logging.Handler):  # type: ignore[misc]
@@ -38,14 +57,9 @@ class BotLogHandler(logging.Handler):  # type: ignore[misc]
         except Exception:  # noqa: BLE001 - не роняем из-за handler
             pass
 
-
 logging.getLogger("uvicorn.access").handlers = [BotLogHandler()]
 logging.getLogger("uvicorn.error").handlers = [BotLogHandler()]
 logging.getLogger("fastapi").handlers = [BotLogHandler()]
-
-
-# Idempotency теперь в БД (processed_payments)
-
 
 # ------------------------------- Utilities ----------------------------------
 def _calc_expiry(days: int) -> datetime:
