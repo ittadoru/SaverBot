@@ -5,7 +5,7 @@ from typing import Optional
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import SUPPORT_GROUP_ID
 from db.base import get_session
@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
+
+cancel_kb = InlineKeyboardMarkup(
+    inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_support")]]
+)
 
 @router.callback_query(F.data == "help")
 async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> None:
@@ -36,7 +40,9 @@ async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> N
         if ticket and ticket.is_closed == 0:
             # активный есть — просто переводим в диалог
             await state.set_state(Support.in_dialog)
-            await callback.message.answer("У вас уже открыт диалог с поддержкой. Напишите сообщение.")
+            await callback.message.answer(
+                "У вас уже открыт диалог с поддержкой. Напишите сообщение."
+            )
             await callback.answer()
             return
         elif ticket and ticket.is_closed == 1:
@@ -60,7 +66,7 @@ async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> N
             await session.commit()
             await state.set_state(Support.waiting_for_question)
             text = "Диалог с поддержкой переоткрыт. Опишите проблему одним сообщением." + (" (Название обновлено)" if renamed else "")
-            await callback.message.answer(text)
+            await callback.message.answer(text, reply_markup=cancel_kb)
             await callback.answer()
             return
 
@@ -68,7 +74,8 @@ async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> N
     await state.set_state(Support.waiting_for_question)
     await callback.message.answer(
         "Опишите вашу проблему или вопрос одним сообщением. "
-        "Я передам его в поддержку. Вы можете отправить текст, фото, видео или документ."
+        "Я передам его в поддержку. Вы можете отправить текст, фото, видео или документ.",
+        reply_markup=cancel_kb
     )
     await callback.answer()
 
@@ -146,24 +153,38 @@ async def create_ticket_handler(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Support.in_dialog, F.text.lower().in_(["/stop", "стоп", "закрыть"]))
-async def close_ticket_by_user_handler(message: Message, state: FSMContext) -> None:
+@router.callback_query(Support.in_dialog, F.data == "cancel_support")
+async def close_ticket_by_user_handler(event, state: FSMContext) -> None:
+    """
+    Закрывает тикет по команде или кнопке от пользователя.
+    """
+    if isinstance(event, Message):
+        user_id = event.from_user.id
+    else:
+        user_id = event.from_user.id
     """
     Закрывает тикет по команде от пользователя.
     """
-    user_id = message.from_user.id
     async with get_session() as session:
         ticket: Optional[SupportTicket] = await get_open_ticket(session, user_id)
         if not ticket:
-            await message.answer("У вас нет активного диалога с поддержкой.")
+            if isinstance(event, Message):
+                await event.answer("У вас нет активного диалога с поддержкой.")
+            else:
+                await event.message.answer("У вас нет активного диалога с поддержкой.")
             await state.clear()
             return
 
         await close_ticket(session, user_id)
         await state.clear()
 
-        await message.answer("Диалог с поддержкой завершён. Вы снова можете пользоваться ботом.")
+        if isinstance(event, Message):
+            await event.answer("Диалог с поддержкой завершён. Вы снова можете пользоваться ботом.")
+        else:
+            await event.message.edit_text("Диалог с поддержкой завершён. Вы снова можете пользоваться ботом.")
+            await event.answer()
         try:
-            await message.bot.send_message(
+            await event.bot.send_message(
                 SUPPORT_GROUP_ID,
                 "❌ Пользователь завершил диалог.",
                 message_thread_id=ticket.topic_id,
@@ -206,3 +227,12 @@ async def forward_to_support_handler(message: Message) -> None:
                 e,
             )
             await message.answer("❗️ Не удалось доставить ваше сообщение. Попробуйте позже.")
+
+@router.callback_query(Support.waiting_for_question, F.data == "cancel_support")
+async def cancel_support_before_ticket_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Позволяет отменить обращение до создания тикета (на этапе ожидания вопроса).
+    """
+    await state.clear()
+    await callback.message.edit_text("Обращение отменено. Если потребуется помощь — просто нажмите 'Помощь' снова.")
+    await callback.answer()

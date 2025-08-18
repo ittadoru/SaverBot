@@ -1,11 +1,12 @@
+
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiogram.utils.markdown as markdown
-
 import asyncio
 import os
+from typing import Optional
 
 from utils.platform_detect import detect_platform
 from utils.video_utils import get_video_resolution
@@ -26,42 +27,71 @@ router = Router()
 FREE_DAILY_LIMIT = 20
 FORMAT_SELECTION_TIMEOUT = 180  # seconds to wait for subscriber to pick YouTube format
 
-# Простая in-memory блокировка (вместо redis is_user_busy/...)
-_busy: set[int] = set()
-_pending_format_tasks: dict[int, asyncio.Task] = {}
-_subscriber_selecting: set[int] = set()  # пользователи, ожидающие первый выбор формата
 
-async def is_user_busy(user_id: int) -> bool:
-    return user_id in _busy
+# FSMContext-based busy/timeout management
+BUSY_KEY = "busy"
+PENDING_TASKS_KEY = "pending_format_tasks"
+SUBSCRIBER_SELECTING_KEY = "subscriber_selecting"
 
-async def set_user_busy(user_id: int) -> None:
-    _busy.add(user_id)
+def get_format_keyboard() -> InlineKeyboardBuilder:
+    kb = InlineKeyboardBuilder()
+    kb.row(
+        InlineKeyboardButton(text='Видео 240p', callback_data='yt_download:video_240'),
+        InlineKeyboardButton(text='Видео 360p', callback_data='yt_download:video_360')
+    )
+    kb.row(
+        InlineKeyboardButton(text='Видео 480p', callback_data='yt_download:video_480'),
+        InlineKeyboardButton(text='Видео 720p', callback_data='yt_download:video_720')
+    )
+    kb.row(InlineKeyboardButton(text='Скачать аудио', callback_data='yt_download:audio'))
+    return kb
 
-async def clear_user_busy(user_id: int) -> None:
-    _busy.discard(user_id)
+async def is_user_busy(state: FSMContext) -> bool:
+    data = await state.get_data()
+    return data.get(BUSY_KEY, False)
 
-def _schedule_format_timeout(user_id: int, bot, chat_id: int):
-    # cancel previous if exists
-    old = _pending_format_tasks.get(user_id)
-    if old and not old.done():
-        old.cancel()
+async def set_user_busy(state: FSMContext, value: bool = True) -> None:
+    await state.update_data({BUSY_KEY: value})
 
+async def clear_user_busy(state: FSMContext) -> None:
+    await state.update_data({BUSY_KEY: False})
+
+async def set_pending_task(state: FSMContext, task: asyncio.Task) -> None:
+    await state.update_data({PENDING_TASKS_KEY: task})
+
+async def get_pending_task(state: FSMContext) -> Optional[asyncio.Task]:
+    data = await state.get_data()
+    return data.get(PENDING_TASKS_KEY)
+
+async def clear_pending_task(state: FSMContext) -> None:
+    await state.update_data({PENDING_TASKS_KEY: None})
+
+async def set_subscriber_selecting(state: FSMContext, value: bool = True) -> None:
+    await state.update_data({SUBSCRIBER_SELECTING_KEY: value})
+
+async def is_subscriber_selecting(state: FSMContext) -> bool:
+    data = await state.get_data()
+    return data.get(SUBSCRIBER_SELECTING_KEY, False)
+
+async def clear_subscriber_selecting(state: FSMContext) -> None:
+    await state.update_data({SUBSCRIBER_SELECTING_KEY: False})
+
+def _schedule_format_timeout(user_id: int, bot, chat_id: int, state: FSMContext):
     async def waiter():
         try:
             await asyncio.sleep(FORMAT_SELECTION_TIMEOUT)
-            # if still busy (format not chosen) release
-            if user_id in _busy:
-                _busy.discard(user_id)
+            if await is_user_busy(state):
+                await clear_user_busy(state)
                 try:
                     await bot.send_message(chat_id, '⌛️ Выбор формата отменён (таймаут). Отправьте ссылку снова.')
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
-        except asyncio.CancelledError:  # noqa: PERF203
+        except asyncio.CancelledError:
             return
         finally:
-            _pending_format_tasks.pop(user_id, None)
-
-    _pending_format_tasks[user_id] = asyncio.create_task(waiter())
+            await clear_pending_task(state)
+    task = asyncio.create_task(waiter())
+    asyncio.create_task(set_pending_task(state, task))
 
 @router.message(F.text.regexp(r'https?://'))
 async def download_handler(message: types.Message, state: FSMContext):
@@ -95,32 +125,23 @@ async def download_handler(message: types.Message, state: FSMContext):
     else:
         is_yt_sub = False
 
-    if await is_user_busy(user.id):
+
+    if await is_user_busy(state):
         await message.answer('⏳ Дождитесь завершения предыдущей загрузки.')
         return
 
     if is_yt_sub:
-        # блокируем сразу, чтобы нельзя было слать новые ссылки параллельно
-        await set_user_busy(user.id)
+        await set_user_busy(state, True)
         await state.update_data({f'yt_url_{user.id}': url})
-        _subscriber_selecting.add(user.id)
-        builder = InlineKeyboardBuilder()
-        builder.row(
-            InlineKeyboardButton(text='Видео 240p', callback_data='yt_download:video_240'),
-            InlineKeyboardButton(text='Видео 360p', callback_data='yt_download:video_360')
-        )
-        builder.row(
-            InlineKeyboardButton(text='Видео 480p', callback_data='yt_download:video_480'),
-            InlineKeyboardButton(text='Видео 720p', callback_data='yt_download:video_720')
-        )
-        builder.row(InlineKeyboardButton(text='Скачать аудио', callback_data='yt_download:audio'))
-        await message.answer('Выберите формат скачивания (3 мин)...', reply_markup=builder.as_markup())
-        _schedule_format_timeout(user.id, message.bot, message.chat.id)
+        await set_subscriber_selecting(state, True)
+        kb = get_format_keyboard()
+        await message.answer('Выберите формат скачивания (3 мин)...', reply_markup=kb.as_markup())
+        _schedule_format_timeout(user.id, message.bot, message.chat.id, state)
         return
 
-    await set_user_busy(user.id)
+    await set_user_busy(state, True)
     if await check_download_limit(message, user.id):
-        await clear_user_busy(user.id)
+        await clear_user_busy(state)
         return
     await message.answer('⏳ Скачиваем...')
     await process_download(message, url, user.id, platform)
@@ -203,19 +224,18 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
     if not url:
         return await callback.answer('Ссылка не найдена.')
     # Антиспам: допускаем только один валидный клик по кнопке формата/аудио
-    if await is_user_busy(user.id):
-        if user.id in _subscriber_selecting:
-            # первый клик – разрешаем и снимаем флаг
-            _subscriber_selecting.discard(user.id)
+    if await is_user_busy(state):
+        if await is_subscriber_selecting(state):
+            await clear_subscriber_selecting(state)
         else:
             return await callback.answer('⏳ Уже обрабатывается предыдущий выбор, дождитесь.')
     else:
-        # (например, истёк таймер и busy снят) — ставим снова и продолжаем
-        await set_user_busy(user.id)
+        await set_user_busy(state, True)
     # отменяем таймер выбора формата
-    task = _pending_format_tasks.pop(user.id, None)
+    task = await get_pending_task(state)
     if task and not task.done():
         task.cancel()
+    await clear_pending_task(state)
     await callback.message.answer('⏳ Скачиваем...')
     try:
         yt = YTDLPDownloader()
@@ -259,6 +279,6 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
         except Exception:
             pass
     finally:
-        await clear_user_busy(user.id)
-    _subscriber_selecting.discard(user.id)
+        await clear_user_busy(state)
+    await clear_subscriber_selecting(state)
 
