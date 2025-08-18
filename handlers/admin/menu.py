@@ -16,11 +16,15 @@ def get_admin_menu_keyboard():
     builder.row(InlineKeyboardButton(text="📊 Статистика", callback_data="stats"))
     builder.row(InlineKeyboardButton(text="👥 Пользователи", callback_data="manage_users"))
     builder.row(InlineKeyboardButton(text="🎟 Промокоды", callback_data="promocode_menu"))
-    builder.row(InlineKeyboardButton(text="📦 Логи", callback_data="get_logs"))
-    builder.row(InlineKeyboardButton(text="📊 Таблицы", callback_data="export_table_menu"))
-    builder.row(InlineKeyboardButton(text="💳 Тарифы", callback_data="tariff_menu"))
-    builder.row(InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu"))
     builder.row(InlineKeyboardButton(text="🗑️ Очистить downloads", callback_data="clear_downloads"))
+    builder.row(
+        InlineKeyboardButton(text="💳 Тарифы", callback_data="tariff_menu"),
+        InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📦 Логи", callback_data="get_logs"),
+        InlineKeyboardButton(text="📊 Таблицы", callback_data="export_table_menu")
+    )
     builder.row(
         InlineKeyboardButton(text="📨 Обычная", callback_data="broadcast_start"),
         InlineKeyboardButton(text="💸 Реклама", callback_data="ad_broadcast_start"),
@@ -55,7 +59,7 @@ async def manage_users_menu(callback: CallbackQuery):
     """Отображает меню управления пользователями."""
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="👥 Все пользователи", callback_data="all_users"))
-    builder.row(InlineKeyboardButton(text="🔍 Поиск", callback_data="user_history_start"))
+    builder.row(InlineKeyboardButton(text="🔍 Поиск пользователя", callback_data="user_history_start"))
     builder.row(InlineKeyboardButton(text="🗑️ Удалить всех", callback_data="delete_all_users"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
 
