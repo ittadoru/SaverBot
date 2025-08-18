@@ -9,6 +9,8 @@ from db.base import get_session
 from db.subscribers import get_subscriber_expiry
 from db.downloads import get_total_downloads, get_daily_downloads
 from db.platforms import get_platform_counts, PLATFORMS
+from handlers.user.referral import get_referral_stats
+from db.users import User
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,8 @@ def _format_subscription_status(expire_at: datetime | None) -> str:
         return "❌ Подписка не активна"
     now = datetime.now(expire_at.tzinfo)
     if expire_at > now:
+        if expire_at.year > 2124:
+            return "✅ Подписка: <b>бессрочная</b>"
         return f"✅ Подписка активна до <b>{expire_at.strftime('%d.%m.%Y %H:%M')}</b>"
     return "❌ Подписка истекла"
 
@@ -52,6 +56,21 @@ def _build_profile_text(user_id: int, name: str, username: str, status: str, tot
         stats += f"    {p.title()}: <b>{platform_stats.get(p, 0)}</b>\n"
     return stats
 
+def _build_referral_text(ref_count: int, level: int, to_next: str) -> str:
+    level_names = {
+        0: "Нет уровня",
+        1: "1",
+        2: "2 (увеличенный лимит)",
+        3: "3 (VIP)",
+        4: "4 (бессрочная подписка)"
+    }
+    return (
+        f"\n<b>Реферальная программа:</b>"
+        f"\n<b>Твой уровень:</b> {level_names[level]}"
+        f"\n<b>Рефералов:</b> {ref_count}"
+        f"\n{to_next}\n"
+    )
+
 
 @router.callback_query(lambda c: c.data == "myprofile")
 async def show_profile(callback: CallbackQuery) -> None:
@@ -66,9 +85,15 @@ async def show_profile(callback: CallbackQuery) -> None:
         total = await get_total_downloads(session, user_id)
         today = await get_daily_downloads(session, user_id)
         platform_stats = await get_platform_counts(session, user_id)
+        # --- Реферальная информация ---
+        ref_count, level, _ = await get_referral_stats(session, user_id)
+        next_level = {0: 1, 1: 3, 2: 10, 3: 30, 4: None}[level]
+        to_next = f"До следующего уровня: {next_level - ref_count} рефералов" if next_level else "Максимальный уровень!"
+
     left = max(0, 20 - today)
     status = _format_subscription_status(expire_at)
     text = _build_profile_text(user_id, name, username, status, total, today, left, platform_stats)
+    text += _build_referral_text(ref_count, level, to_next)
 
     current = (callback.message.text or "").strip()
     if current == text.strip():

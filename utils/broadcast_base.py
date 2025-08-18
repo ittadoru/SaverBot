@@ -4,22 +4,6 @@
 - Общей рассылкой (всем)
 - Рекламной (без активной подписки)
 - Неплатившие (has_paid_ever = false)
-
-Использование:
-    from utils.broadcast_base import register_broadcast_constructor
-    router = Router()
-    async def audience_fetcher(): ...  # -> list[int]
-    register_broadcast_constructor(
-        router,
-        start_trigger="broadcast_start",
-        prefix="broadcast",
-        title="📢 **Конструктор общей рассылки**",
-        send_button_label="🚀 Отправить",
-        start_status_text="⏳ Рассылка всем пользователям начинается...",
-        summary_title="✅ **Общая рассылка завершена!**",
-        total_label="Всего пользователей для рассылки",
-        audience_fetcher=audience_fetcher,
-    )
 """
 from __future__ import annotations
 
@@ -27,6 +11,8 @@ import asyncio
 import logging
 from contextlib import suppress
 from typing import Awaitable, Callable
+from handlers.user.referral import get_referral_stats
+from db.base import get_session
 
 from aiogram import F, Bot, Router
 from aiogram.exceptions import TelegramAPIError
@@ -194,6 +180,18 @@ def register_broadcast_constructor(
         sent = 0
         failed = 0
         user_ids = await audience_fetcher()
+        # --- Фильтрация VIP для рекламных рассылок ---
+        if 'реклам' in title.lower() or 'ad' in prefix.lower():
+            filtered_ids = []
+            async with get_session() as session:
+                for uid in user_ids:
+                    try:
+                        _, _, is_vip = await get_referral_stats(session, uid)
+                        if not is_vip:
+                            filtered_ids.append(uid)
+                    except Exception:
+                        filtered_ids.append(uid)  # если ошибка — не фильтруем
+            user_ids = filtered_ids
         total = len(user_ids)
         logger.info(f"Начинается рассылка '{prefix}' для {total} пользователей.")
         for user_id in user_ids:

@@ -5,7 +5,6 @@ from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiogram.utils.markdown as markdown
 import asyncio
-import os
 from typing import Optional
 
 from utils.platform_detect import detect_platform
@@ -16,6 +15,7 @@ from services.youtube import YTDLPDownloader
 from utils import logger as log
 from db.base import get_session
 from db.subscribers import is_subscriber
+from handlers.user.referral import get_referral_stats
 from db.users import log_user_activity, add_or_update_user
 from db.channels import is_channel_guard_enabled, get_required_active_channels, check_user_memberships
 from db.downloads import get_daily_downloads, increment_daily_download, increment_download, add_download_link
@@ -24,8 +24,8 @@ from config import PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
 
 router = Router()
 
-FREE_DAILY_LIMIT = 20
-FORMAT_SELECTION_TIMEOUT = 180  # seconds to wait for subscriber to pick YouTube format
+FREE_DAILY_LIMIT = 10
+FORMAT_SELECTION_TIMEOUT = 30  # seconds to wait for subscriber to pick YouTube format
 
 
 # FSMContext-based busy/timeout management
@@ -105,21 +105,23 @@ async def download_handler(message: types.Message, state: FSMContext):
 
     # --- Глобальное ограничение и подписка на каналы ---
     async with get_session() as session:
-        guard_on = await is_channel_guard_enabled(session)
-        if guard_on:
-            required_channels = await get_required_active_channels(session)
-            if required_channels:
-                bot = message.bot
-                check_results = await check_user_memberships(bot, user.id, required_channels)
-                not_joined = [ch for ch, res in zip(required_channels, check_results) if not res.is_member]
-                if not_joined:
-                    text = "<b>Для скачивания необходимо подписаться на каналы:</b>\n\n"
-                    for ch in not_joined:
-                        link = markdown.hlink(f"@{ch.username}", f"https://t.me/{ch.username}")
-                        text += f"{link}\n"
-                    text += "\nПосле подписки — отправьте ссылку ещё раз."
-                    await message.answer(text, parse_mode="HTML")
-                    return
+        _, _, is_vip = await get_referral_stats(session, user.id)
+        if not is_vip:
+            guard_on = await is_channel_guard_enabled(session)
+            if guard_on:
+                required_channels = await get_required_active_channels(session)
+                if required_channels:
+                    bot = message.bot
+                    check_results = await check_user_memberships(bot, user.id, required_channels)
+                    not_joined = [ch for ch, res in zip(required_channels, check_results) if not res.is_member]
+                    if not_joined:
+                        text = "<b>Для скачивания необходимо подписаться на каналы:</b>\n\n"
+                        for ch in not_joined:
+                            link = markdown.hlink(f"@{ch.username}", f"https://t.me/{ch.username}")
+                            text += f"{link}\n"
+                        text += "\nПосле подписки — отправьте ссылку ещё раз."
+                        await message.answer(text, parse_mode="HTML")
+                        return
 
     # корректная проверка подписки (нужна сессия)
     if platform == 'youtube':
@@ -159,8 +161,14 @@ async def check_download_limit(message: types.Message, user_id: int) -> bool:
     async with get_session() as session:
         daily = await get_daily_downloads(session, user_id)
         sub = await is_subscriber(session, user_id)
-    if daily >= FREE_DAILY_LIMIT and not sub:
-        await message.answer('⚠️ Лимит 20 скачиваний в день. Оформите подписку для безлимита.')
+        _, level, _ = await get_referral_stats(session, user_id)
+    if level >= 3 or sub:
+        return False
+    if level == 2 and daily >= FREE_DAILY_LIMIT*2:
+        await message.answer('⚠️ Лимит 20 скачиваний в день. Оформите подписку для безлимита или повысьте реферальный уровень.')
+        return True
+    if daily >= FREE_DAILY_LIMIT:
+        await message.answer('⚠️ Лимит 10 скачиваний в день. Оформите подписку для безлимита или повысьте реферальный уровень.')
         return True
     return False
 

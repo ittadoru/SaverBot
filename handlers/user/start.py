@@ -12,6 +12,8 @@ from aiogram.filters import Command
 from db.base import get_session
 from db.promocodes import add_promocode, get_promocode
 from db.users import add_or_update_user, is_user_exists, log_user_activity
+from db.subscribers import add_subscriber_with_duration
+from handlers.user.referral import get_referral_stats
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,30 @@ async def cmd_start(message: types.Message) -> None:
         await log_user_activity(session, user_id)
         if is_new:
             promo_code = await _generate_unique_promocode(session)
+            # --- Бонус за реферала: +1 день подписки рефереру ---
+            if referrer_id:
+                try:
+                    await message.answer("Ты получил бонус за реферала! (1 день подписки)")
+                    await add_subscriber_with_duration(session, referrer_id, 1)
+                    logger.info(f"Начислен бонус (+1 день) подписки рефереру {referrer_id} за нового пользователя {user_id}")
+                    # --- Проверка уровня реферера и выдача VIP/бессрочной подписки ---
+                    ref_count, level, _ = await get_referral_stats(session, referrer_id)
+                    if level == 4:
+                        # Бессрочная подписка: 100 лет = 36500 дней
+                        await add_subscriber_with_duration(session, referrer_id, 36500)
+                        try:
+                            await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 4 уровня и получили бессрочную подписку!")
+                        except Exception:
+                            pass
+                        logger.info(f"Реферер {referrer_id} получил бессрочную подписку за 4 уровень ({ref_count} рефералов)")
+                    elif level == 3:
+                        try:
+                            await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы стали VIP-пользователем (3 уровень по рефералам) и получили все бонусы!")
+                        except Exception:
+                            pass
+                        logger.info(f"Реферер {referrer_id} стал VIP за 3 уровень ({ref_count} рефералов)")
+                except Exception as e:
+                    logger.error(f"Ошибка при начислении бонуса рефереру {referrer_id}: {e}")
 
     if is_new:
         if promo_code:
