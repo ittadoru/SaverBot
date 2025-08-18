@@ -21,6 +21,7 @@ async def ensure_schema() -> None:
             await conn.execute(text("SELECT 1 FROM alembic_version LIMIT 1"))
         except SQLAlchemyError:
             has_alembic = False
+            await conn.rollback()
 
         if has_alembic:
             print("[ensure_schema] Alembic detected (alembic_version table exists) — skip create_all().")

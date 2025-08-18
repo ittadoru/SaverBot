@@ -33,6 +33,9 @@ BUSY_KEY = "busy"
 PENDING_TASKS_KEY = "pending_format_tasks"
 SUBSCRIBER_SELECTING_KEY = "subscriber_selecting"
 
+
+
+# Фиксированная клавиатура форматов YouTube
 def get_format_keyboard() -> InlineKeyboardBuilder:
     kb = InlineKeyboardBuilder()
     kb.row(
@@ -127,8 +130,14 @@ async def download_handler(message: types.Message, state: FSMContext):
 
 
     if await is_user_busy(state):
-        await message.answer('⏳ Дождитесь завершения предыдущей загрузки.')
-        return
+        # Если пользователь был в режиме выбора формата — сбрасываем busy и таймер, разрешаем новую ссылку
+        task = await get_pending_task(state)
+        if task and not task.done():
+            task.cancel()
+        await clear_pending_task(state)
+        await clear_user_busy(state)
+        await clear_subscriber_selecting(state)
+        # Можно добавить уведомление, если нужно: await message.answer('Предыдущий выбор формата отменён.')
 
     if is_yt_sub:
         await set_user_busy(state, True)
@@ -144,7 +153,7 @@ async def download_handler(message: types.Message, state: FSMContext):
         await clear_user_busy(state)
         return
     await message.answer('⏳ Скачиваем...')
-    await process_download(message, url, user.id, platform)
+    await process_download(message, url, user.id, platform, state)
 
 async def check_download_limit(message: types.Message, user_id: int) -> bool:
     async with get_session() as session:
@@ -173,7 +182,7 @@ def _normalize_download_result(result):
     return result
 
 
-async def process_download(message: types.Message, url: str, user_id: int, platform: str):
+async def process_download(message: types.Message, url: str, user_id: int, platform: str, state: FSMContext):
     try:
         downloader = get_downloader(url)
         async with get_session() as session:
@@ -213,17 +222,20 @@ async def process_download(message: types.Message, url: str, user_id: int, platf
         except Exception:  # noqa: BLE001
             pass
     finally:
-        await clear_user_busy(user_id)
+        await clear_user_busy(state)
+
 
 
 @router.callback_query(lambda c: c.data.startswith('yt_download:'))
 async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext):
-    fmt = callback.data.split(':')[1]
+    """
+    Обрабатывает выбор формата пользователем. Формат определяется по id из callback_data.
+    """
+    fmt_id = callback.data.split(':')[1]
     user = callback.from_user
     url = (await state.get_data()).get(f'yt_url_{user.id}')
     if not url:
         return await callback.answer('Ссылка не найдена.')
-    # Антиспам: допускаем только один валидный клик по кнопке формата/аудио
     if await is_user_busy(state):
         if await is_subscriber_selecting(state):
             await clear_subscriber_selecting(state)
@@ -239,15 +251,13 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
     await callback.message.answer('⏳ Скачиваем...')
     try:
         yt = YTDLPDownloader()
-        if fmt.startswith('video_'):
-            res = fmt.split('_')[1]
-            res_map = {
-                '240': 'bestvideo[ext=mp4][vcodec^=avc1][height<=240]+bestaudio[ext=m4a]/best[ext=mp4]',
-                '360': 'bestvideo[ext=mp4][vcodec^=avc1][height<=360]+bestaudio[ext=m4a]/best[ext=mp4]',
-                '480': 'bestvideo[ext=mp4][vcodec^=avc1][height<=480]+bestaudio[ext=m4a]/best[ext=mp4]',
-                '720': 'bestvideo[ext=mp4][vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]',
-            }
-            raw_result = await yt.download(url, user.id, callback.message, custom_format=res_map.get(res, res_map['480']))
+        # Получаем список форматов, ищем выбранный
+        formats = await yt.get_available_formats(url, user.id)
+        selected = next((f for f in formats if f['id'] == fmt_id), None)
+        if not selected:
+            return await callback.answer('Формат недоступен.')
+        if selected['type'] == 'video':
+            raw_result = await yt.download(url, user.id, callback.message, custom_format=selected['format'])
             normalized = _normalize_download_result(raw_result)
             if isinstance(normalized, tuple) and normalized and normalized[0] == 'DENIED_SIZE':
                 size_mb = normalized[1]
@@ -261,8 +271,8 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
             path = normalized
             w, h = get_video_resolution(path)
             asyncio.create_task(send_video(callback.bot, callback.message, callback.message.chat.id, user.id, path, w, h))
-        elif fmt == 'audio':
-            path = await yt.download_audio(url, user.id)
+        elif selected['type'] == 'audio':
+            path = await yt.download_audio(url, user.id, custom_format=selected['format'])
             asyncio.create_task(send_audio(callback.bot, callback.message, callback.message.chat.id, path))
         else:
             return await callback.answer('Неизвестный формат.')
@@ -270,9 +280,9 @@ async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext)
             await log_user_activity(session, user.id)
             await increment_download(session, user.id)
             await increment_platform_download(session, user.id, 'youtube')
-            await increment_daily_download(session, user.id)  # теперь всегда для всех
+            await increment_daily_download(session, user.id)
             await add_download_link(session, user.id, url)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.log_error(f'Ошибка: {e}')
         try:
             await callback.message.answer('❗️ Ошибка при скачивании.')

@@ -32,7 +32,7 @@ services:
         if ls alembic/versions/*.py 1>/dev/null 2>&1; then
           alembic upgrade head || { echo 'Alembic failed'; exit 1; }
         else
-          python scripts/ensure_schema.py || { echo 'ensure_schema failed'; exit 1; }
+          python -m scripts.ensure_schema || { echo 'ensure_schema failed'; exit 1; }
         fi;
         watchfiles --filter python 'python bot.py'
       "
@@ -55,7 +55,7 @@ services:
         if ls alembic/versions/*.py 1>/dev/null 2>&1; then
           echo 'Revisions present (already migrated by bot).';
         else
-          python scripts/ensure_schema.py || true
+          python -m scripts.ensure_schema || true
         fi;
         uvicorn server:app --host 0.0.0.0 --port 8000 --reload
       "

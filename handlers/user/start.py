@@ -44,9 +44,12 @@ async def _generate_unique_promocode(session, tries: int = PROMO_MAX_TRIES) -> O
     return None
 
 
+
 @router.message(Command("start"))
 async def cmd_start(message: types.Message) -> None:
-    """Обрабатывает /start: добавляет/обновляет пользователя, логирует активность, даёт подарок новым."""
+    """
+    Обрабатывает /start: добавляет/обновляет пользователя, логирует активность, даёт подарок новым, поддерживает рефералов.
+    """
     user_id = message.from_user.id
     first_name = message.from_user.first_name
     username_raw = message.from_user.username or message.from_user.full_name
@@ -54,11 +57,30 @@ async def cmd_start(message: types.Message) -> None:
 
     promo_code: Optional[str] = None
     is_new: bool = False
+    referrer_id: Optional[int] = None
+
+
+    # Обработка реферальной ссылки
+    args = message.get_args() if hasattr(message, 'get_args') else ''
+    if not args and message.text:
+        parts = message.text.split(maxsplit=1)
+        if len(parts) == 2:
+            args = parts[1]
+
+    # Парсим referrer_id из args
+    if args and args.startswith('ref_'):
+        try:
+            ref_id = int(args[4:])
+            if ref_id != user_id:
+                referrer_id = ref_id
+        except Exception:
+            pass
 
     async with get_session() as session:
         is_new = not await is_user_exists(session, user_id)
+        # referrer_id только для новых пользователей
         user = await add_or_update_user(
-            session, user_id, first_name=first_name, username=message.from_user.username
+            session, user_id, first_name=first_name, username=message.from_user.username, referrer_id=referrer_id if is_new else None
         )
         await log_user_activity(session, user_id)
         if is_new:
@@ -76,7 +98,7 @@ async def cmd_start(message: types.Message) -> None:
         promo_text = ""
 
     if is_new:
-        logger.info("Новый пользователь %s (id=%s) зарегистрирован", username_raw, user_id)
+        logger.info("Новый пользователь %s (id=%s, referrer_id=%s) зарегистрирован", username_raw, user_id, referrer_id)
     else:
         logger.debug("Повторный старт пользователя id=%s", user_id)
 

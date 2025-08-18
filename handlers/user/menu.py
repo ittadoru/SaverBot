@@ -1,6 +1,5 @@
-
 """
-Главное меню пользователя с основными разделами бота.
+Главное меню пользователя с основными разделами бота (без обработчиков рефералов).
 """
 
 from aiogram import Router, F
@@ -18,6 +17,10 @@ def get_main_menu_keyboard():
     builder.row(
         InlineKeyboardButton(text="🎟 Ввести промокод", callback_data="promo"),
         InlineKeyboardButton(text="💳 Подписка", callback_data="subscribe")
+    )
+    builder.row(
+        InlineKeyboardButton(text="👥 Пригласить друга", callback_data="invite_friend"),
+        InlineKeyboardButton(text="📊 Мои рефералы", callback_data="my_referrals")
     )
     builder.row(InlineKeyboardButton(text="ℹ️ Подробнее", callback_data="more_info"))
     return builder.as_markup()
@@ -45,7 +48,7 @@ async def show_main_menu(message: Message):
 
 @router.callback_query(lambda c: c.data == "profile")
 async def show_profile(callback: CallbackQuery):
-    """Обработчик для кнопки "Мой профиль"."""
+    """Обработчик для кнопки 'Мой профиль'."""
     await callback.message.edit_text(
         MAIN_MENU_TEXT.format(username=callback.from_user.username),
         reply_markup=get_main_menu_keyboard(),

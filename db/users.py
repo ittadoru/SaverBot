@@ -35,6 +35,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     has_paid_ever = Column(Boolean, nullable=False, server_default="false")
     first_paid_at = Column(DateTime(timezone=True), nullable=True)
+    referrer_id = Column(BigInteger, ForeignKey('users.id'), nullable=True)
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -59,12 +60,17 @@ class UserActivity(Base):
         return f"<UserActivity id={self.id} user_id={self.user_id} activity_date={self.activity_date}>"
 
 
+
 async def add_or_update_user(
-    session: AsyncSession, user_id: int, first_name: Optional[str], username: Optional[str]
+    session: AsyncSession,
+    user_id: int,
+    first_name: Optional[str],
+    username: Optional[str],
+    referrer_id: Optional[int] = None
 ) -> User:
     """
     Добавляет нового пользователя или обновляет имя и username существующего.
-    Обновляет объект пользователя, чтобы загрузить значения, устанавливаемые сервером.
+    Если пользователь новый, может установить referrer_id.
     """
     user = await session.get(User, user_id)
     try:
@@ -74,7 +80,7 @@ async def add_or_update_user(
             await session.commit()
             await session.refresh(user)
         else:
-            user = User(id=user_id, first_name=first_name, username=username)
+            user = User(id=user_id, first_name=first_name, username=username, referrer_id=referrer_id)
             session.add(user)
             await session.commit()
             await session.refresh(user)
@@ -82,6 +88,13 @@ async def add_or_update_user(
         await session.rollback()
         raise
     return user
+
+
+def get_ref_link(bot_username: str, user_id: int) -> str:
+    """
+    Генерирует персональную реферальную ссылку для пользователя.
+    """
+    return f"https://t.me/{bot_username}?start=ref_{user_id}"
 
 
 async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
