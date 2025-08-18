@@ -34,7 +34,9 @@ def get_all_models():
 
 
 def get_table_keyboard() -> InlineKeyboardBuilder:
-    """Создает клавиатуру со списком всех доступных для экспорта таблиц."""
+    """
+    Создает клавиатуру со списком всех доступных для экспорта таблиц с эмодзи и дружелюбными подписями.
+    """
     builder = InlineKeyboardBuilder()
     models = get_all_models()
 
@@ -46,17 +48,20 @@ def get_table_keyboard() -> InlineKeyboardBuilder:
             callback_data=TableExportCallback(table_name=table_name).pack()
         )
 
-    builder.button(text="⬅️ Назад", callback_data="admin_menu")
-    builder.adjust(2)  # Располагаем по 2 кнопки в ряд
+    builder.button(text="⬅️ Назад в меню", callback_data="admin_menu")
+    builder.adjust(2)
     return builder
 
 
 @router.callback_query(F.data == "export_table_menu")
-async def export_table_menu(callback: CallbackQuery):
-    """Отображает меню выбора таблиц для экспорта."""
+async def export_table_menu(callback: CallbackQuery) -> None:
+    """
+    Отображает меню выбора таблиц для экспорта с дружелюбным текстом и эмодзи.
+    """
     builder = get_table_keyboard()
     await callback.message.edit_text(
-        "Выберите таблицу для экспорта:",
+        "<b>📄 Экспорт таблиц</b>\n\nВыберите таблицу для экспорта в формате CSV:",
+        parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
     await callback.answer()
@@ -73,19 +78,19 @@ def format_value(value):
 
 
 @router.callback_query(TableExportCallback.filter())
-async def export_table_handler(callback: CallbackQuery, callback_data: TableExportCallback):
+async def export_table_handler(callback: CallbackQuery, callback_data: TableExportCallback) -> None:
     """
-    Универсальный обработчик экспорта любой таблицы в формат CSV.
+    Универсальный обработчик экспорта любой таблицы в формат CSV с дружелюбным UX и эмодзи.
     """
     table_name = callback_data.table_name
-    await callback.answer(f"⏳ Начинаю экспорт таблицы {table_name}...")
+    await callback.answer(f"⏳ Готовим экспорт таблицы <b>{table_name}</b>...", show_alert=False)
 
     try:
         # Находим модель по имени таблицы
         model_mapper = next((m for m in get_all_models() if m.class_.__tablename__ == table_name), None)
 
         if not model_mapper:
-            await callback.answer(f"❌ Ошибка: Таблица '{table_name}' не найдена.", show_alert=True)
+            await callback.answer(f"❌ <b>Таблица '{table_name}' не найдена.</b>", show_alert=True)
             return
 
         model_class = model_mapper.class_
@@ -97,10 +102,11 @@ async def export_table_handler(callback: CallbackQuery, callback_data: TableExpo
 
             if not rows:
                 await callback.message.edit_text(
-                f"ℹ️ Таблица '<b>{table_name}</b>' пуста.\n\n"
+                    f"ℹ️ <b>Таблица <code>{table_name}</code> пуста.</b>\n\n"
                     "Выберите другую таблицу для экспорта:",
-                reply_markup=callback.message.reply_markup  # Оставляем ту же клавиатуру
-                )       
+                    parse_mode="HTML",
+                    reply_markup=callback.message.reply_markup
+                )
                 await callback.answer()
                 return
 
@@ -125,14 +131,14 @@ async def export_table_handler(callback: CallbackQuery, callback_data: TableExpo
         file = BufferedInputFile(csv_data, filename=f"{table_name}.csv")
         await callback.message.answer_document(
             file,
-            caption=f"📄 Экспорт таблицы: `{table_name}.csv`"
+            caption=f"📄 <b>Экспорт таблицы:</b> <code>{table_name}.csv</code>",
+            parse_mode="HTML"
         )
-        # Завершаем колбэк после успешной отправки
-        await callback.answer()
+        await callback.answer("✅ Файл успешно отправлен!", show_alert=False)
 
     except Exception as e:
         logging.error(f"Ошибка при экспорте таблицы {table_name}: {e}", exc_info=True)
         await callback.answer(
-            f"❌ Произошла ошибка при экспорте таблицы {table_name}. Подробности в логах.",
+            f"❌ <b>Произошла ошибка при экспорте таблицы <code>{table_name}</code>.</b>\nПроверьте логи.",
             show_alert=True
         )

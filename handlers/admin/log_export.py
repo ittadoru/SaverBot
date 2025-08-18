@@ -57,7 +57,7 @@ async def show_log_menu(callback: CallbackQuery):
     log_files = get_log_files()
 
     if not log_files:
-        await callback.answer("🗂️ Файлы логов не найдены.", show_alert=True)
+        await callback.answer("🗂️ Логи не найдены.", show_alert=True)
         return
 
     builder = InlineKeyboardBuilder()
@@ -67,44 +67,46 @@ async def show_log_menu(callback: CallbackQuery):
         if filename == "bot.log":
             display_name = "📄 Текущий лог"
         else:
-            # Извлекаем дату из имени файла, например, '2023-10-27'
             date_str = filename.replace("bot.log.", "")
-            display_name = f"📄 Архив {date_str}"
+            display_name = f"🗂️ Архив {date_str}"
 
         builder.button(
             text=display_name,
             callback_data=LogCallback(filename=filename).pack()
         )
 
-    builder.adjust(2)  # По 2 кнопки в ряду
+    builder.adjust(2)
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
 
     await callback.message.edit_text(
-        "Выберите файл логов для выгрузки:",
-        reply_markup=builder.as_markup()
+        "📝 <b>Экспорт логов</b>\n\nВыберите нужный файл:",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
     )
     await callback.answer()
 
 
 @router.callback_query(LogCallback.filter())
 async def send_log_file(callback: CallbackQuery, callback_data: LogCallback):
-    """Отправляет выбранный файл логов администратору."""
+    """
+    Отправляет выбранный файл логов администратору.
+    """
     filename = callback_data.filename
     log_path = os.path.join(LOG_DIR, filename)
     user_id = callback.from_user.id
 
     if not os.path.exists(log_path):
         logging.warning(f"Админ {user_id} запросил несуществующий лог: {filename}")
-        await callback.answer(f"❗️ Файл логов '{filename}' не найден.", show_alert=True)
+        await callback.answer(f"❗️ Файл <b>{filename}</b> не найден.", show_alert=True, parse_mode="HTML")
         return
 
     if os.path.getsize(log_path) == 0:
         logging.info(f"Админ {user_id} запросил пустой лог: {filename}")
-        await callback.answer(f"⚠️ Файл логов '{filename}' пуст.", show_alert=True)
+        await callback.answer(f"⚠️ Файл <b>{filename}</b> пуст.", show_alert=True, parse_mode="HTML")
         return
 
     logging.info(f"Админ {user_id} запросил лог: {filename}")
 
     file = FSInputFile(log_path)
-    await callback.message.answer_document(file, caption=f"📄 Ваш файл логов: `{filename}`")
+    await callback.message.answer_document(file, caption=f"📄 Ваш лог: <code>{filename}</code>", parse_mode="HTML")
     await callback.answer()

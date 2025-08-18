@@ -1,65 +1,87 @@
-"""Модели пользователя и активности: регистрация/обновление, логирование, выборки и статистика."""
+"""
+Модели пользователя и активности: регистрация/обновление, логирование, выборки и статистика.
+Включает подробные docstring, type hints, __repr__ и безопасную обработку транзакций.
+"""
+
 
 import datetime
+from typing import Optional
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, BigInteger, String, Boolean, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
+from sqlalchemy.exc import SQLAlchemyError
 
 from db.base import Base
 from db.subscribers import Subscriber
 
 
+
 class User(Base):
-    """Представляет пользователя бота."""
+    """
+    Представляет пользователя бота.
+    id: ID пользователя
+    first_name: имя
+    username: username
+    created_at: дата регистрации
+    has_paid_ever: флаг «хоть раз платил»
+    first_paid_at: дата первого платежа
+    activities: активности пользователя
+    """
     __tablename__ = 'users'
     id = Column(BigInteger, primary_key=True, autoincrement=False)
     first_name = Column(String, nullable=True)
     username = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    # Флаг «хоть раз платил» и дата первого платежа
     has_paid_ever = Column(Boolean, nullable=False, server_default="false")
     first_paid_at = Column(DateTime(timezone=True), nullable=True)
-
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<User id={self.id} username={self.username} has_paid_ever={self.has_paid_ever}>"
 
 
 class UserActivity(Base):
-    """Фиксирует временные метки активности пользователя."""
+    """
+    Фиксирует временные метки активности пользователя.
+    id: ID активности
+    user_id: ID пользователя
+    activity_date: дата активности
+    user: связь с пользователем
+    """
     __tablename__ = 'user_activity'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False)
     activity_date = Column(DateTime(timezone=True), server_default=func.now())
-
     user = relationship("User", back_populates="activities")
+
+    def __repr__(self) -> str:
+        return f"<UserActivity id={self.id} user_id={self.user_id} activity_date={self.activity_date}>"
 
 
 async def add_or_update_user(
-    session: AsyncSession, user_id: int, first_name: str | None, username: str | None
+    session: AsyncSession, user_id: int, first_name: Optional[str], username: Optional[str]
 ) -> User:
     """
     Добавляет нового пользователя или обновляет имя и username существующего.
     Обновляет объект пользователя, чтобы загрузить значения, устанавливаемые сервером.
     """
     user = await session.get(User, user_id)
-    if user:
-        user.first_name = first_name
-        user.username = username
-        await session.commit()
-        await session.refresh(user)
-    else:
-        user = User(id=user_id, first_name=first_name, username=username)
-        session.add(user)
-        await session.commit()
-        await session.refresh(user)
+    try:
+        if user:
+            user.first_name = first_name
+            user.username = username
+            await session.commit()
+            await session.refresh(user)
+        else:
+            user = User(id=user_id, first_name=first_name, username=username)
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+    except SQLAlchemyError:
+        await session.rollback()
+        raise
     return user
-
-
-async def log_user_activity(session: AsyncSession, user_id: int) -> None:
-    """Логирует активность пользователя."""
-    new_activity = UserActivity(user_id=user_id)
-    session.add(new_activity)
-    await session.commit()
 
 
 async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
@@ -113,13 +135,20 @@ async def get_new_users_count_for_period(session: AsyncSession, days: int) -> in
 
 
 async def delete_user_by_id(session: AsyncSession, user_id: int) -> bool:
-    """Удаляет пользователя по его ID."""
+    """
+    Удаляет пользователя по его ID.
+    """
     user = await session.get(User, user_id)
-    if user:
+    if not user:
+        return False
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
         await session.delete(user)
         await session.commit()
-        return True
-    return False
+    except SQLAlchemyError:
+        await session.rollback()
+        return False
+    return True
 
 
 async def get_users_by_ids(session: AsyncSession, user_ids: list[int]) -> list[User]:
@@ -132,19 +161,25 @@ async def get_users_by_ids(session: AsyncSession, user_ids: list[int]) -> list[U
 
 
 async def mark_user_has_paid(session: AsyncSession, user_id: int) -> None:
-    """Отмечает пользователя как совершившего хотя бы один платёж (идемпотентно)."""
+    """
+    Отмечает пользователя как совершившего хотя бы один платёж (идемпотентно).
+    """
     now = datetime.datetime.now(datetime.timezone.utc)
     user = await session.get(User, user_id)
-    if user:
-        if not user.has_paid_ever:
-            user.has_paid_ever = True
-            if user.first_paid_at is None:
-                user.first_paid_at = now
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
+        if user:
+            if not user.has_paid_ever:
+                user.has_paid_ever = True
+                if user.first_paid_at is None:
+                    user.first_paid_at = now
+                await session.commit()
+        else:  # На случай если где-то не был создан ранее
+            user = User(id=user_id, first_name=None, username=None, has_paid_ever=True, first_paid_at=now)
+            session.add(user)
             await session.commit()
-    else:  # На случай если где-то не был создан ранее
-        user = User(id=user_id, first_name=None, username=None, has_paid_ever=True, first_paid_at=now)
-        session.add(user)
-        await session.commit()
+    except SQLAlchemyError:
+        await session.rollback()
 
 
 async def has_user_paid_ever(session: AsyncSession, user_id: int) -> bool:
@@ -178,3 +213,15 @@ async def get_user_ids_without_subscription(session: AsyncSession) -> list[int]:
     )
     result = await session.execute(query)
     return list(result.scalars().all())
+
+async def log_user_activity(session: AsyncSession, user_id: int) -> None:
+    """
+    Логирует активность пользователя (создаёт запись UserActivity).
+    """
+    activity = UserActivity(user_id=user_id)
+    session.add(activity)
+    try:
+        await session.commit()
+    except SQLAlchemyError:
+        await session.rollback()
+        raise

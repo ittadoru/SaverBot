@@ -1,7 +1,10 @@
-"""Учёт количества загрузок пользователей (дневной лимит и общий счётчик) в PostgreSQL.
+"""
+Учёт количества загрузок пользователей (дневной лимит и общий счётчик) в PostgreSQL.
 
-Для упрощения: одна таблица с уникальной строкой per (user_id, date) для дневного счётчика
-и отдельное поле total_downloads для общего числа.
+Таблицы:
+- daily_downloads: уникальная строка per (user_id, date) для дневного счётчика
+- total_downloads: общее число загрузок per user_id
+- user_download_links: последние ссылки пользователя (ограничено MAX_STORED_LINKS)
 """
 from __future__ import annotations
 
@@ -22,63 +25,95 @@ class DailyDownload(Base):
         PrimaryKeyConstraint("user_id", "date", name="pk_daily_downloads"),
     )
 
+    def __repr__(self) -> str:
+        return f"<DailyDownload user_id={self.user_id} date={self.date} count={self.count}>"
+
 
 class TotalDownload(Base):
     __tablename__ = "total_downloads"
     user_id = Column(BigInteger, primary_key=True)
     total = Column(BigInteger, nullable=False, default=0)
 
+    def __repr__(self) -> str:
+        return f"<TotalDownload user_id={self.user_id} total={self.total}>"
+
 
 class DownloadLink(Base):
-    """Хранит последние ссылки пользователя ( максимум N по времени )."""
+    """Хранит последние ссылки пользователя (максимум N по времени)."""
     __tablename__ = "user_download_links"
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, index=True, nullable=False)
     url = Column(String(1024), nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
+    def __repr__(self) -> str:
+        return f"<DownloadLink id={self.id} user_id={self.user_id} url={self.url[:20]}...>"
+
+
 
 async def get_daily_downloads(session: AsyncSession, user_id: int) -> int:
+    """Возвращает количество загрузок пользователя за сегодня."""
     today = datetime.date.today()
     row = await session.get(DailyDownload, {"user_id": user_id, "date": today})
     return row.count if row else 0
 
 
-async def increment_daily_download(session: AsyncSession, user_id: int) -> None:
-    today = datetime.date.today()
-    row = await session.get(DailyDownload, {"user_id": user_id, "date": today})
+
+async def get_or_create_daily_download(session: AsyncSession, user_id: int, date: datetime.date) -> DailyDownload:
+    row = await session.get(DailyDownload, {"user_id": user_id, "date": date})
     if row:
-        row.count += 1
-    else:
-        row = DailyDownload(user_id=user_id, date=today, count=1)
-        session.add(row)
+        return row
+    row = DailyDownload(user_id=user_id, date=date, count=0)
+    session.add(row)
+    await session.flush()
+    return row
+
+async def increment_daily_download(session: AsyncSession, user_id: int) -> None:
+    """Увеличивает дневной счётчик загрузок пользователя."""
+    today = datetime.date.today()
+    row = await get_or_create_daily_download(session, user_id, today)
+    row.count += 1
     await session.commit()
 
 
-async def increment_download(session: AsyncSession, user_id: int) -> None:
+
+async def get_or_create_total_download(session: AsyncSession, user_id: int) -> TotalDownload:
     row = await session.get(TotalDownload, user_id)
     if row:
-        row.total += 1
-    else:
-        row = TotalDownload(user_id=user_id, total=1)
-        session.add(row)
+        return row
+    row = TotalDownload(user_id=user_id, total=0)
+    session.add(row)
+    await session.flush()
+    return row
+
+async def increment_download(session: AsyncSession, user_id: int) -> None:
+    """Увеличивает общий счётчик загрузок пользователя."""
+    row = await get_or_create_total_download(session, user_id)
+    row.total += 1
     await session.commit()
+
 
 
 async def get_total_downloads(session: AsyncSession, user_id: int) -> int:
+    """Возвращает общее количество загрузок пользователя."""
     row = await session.get(TotalDownload, user_id)
     return row.total if row else 0
 
 
+
 async def get_top_downloaders(session: AsyncSession, limit: int = 10) -> list[tuple[int, int]]:
+    """Возвращает топ пользователей по количеству загрузок."""
     query = select(TotalDownload.user_id, TotalDownload.total).order_by(TotalDownload.total.desc()).limit(limit)
     res = await session.execute(query)
     return list(res.all())
 
 
 
+
 MAX_STORED_LINKS = 10
+
 async def add_download_link(session: AsyncSession, user_id: int, url: str) -> None:
+    """Добавляет ссылку пользователя и хранит только последние MAX_STORED_LINKS."""
     session.add(DownloadLink(user_id=user_id, url=url[:1024]))
     await session.flush()
     # Оставляем только последние MAX_STORED_LINKS
@@ -96,7 +131,9 @@ async def add_download_link(session: AsyncSession, user_id: int, url: str) -> No
     await session.commit()
 
 
+
 async def get_last_links(session: AsyncSession, user_id: int, limit: int = 3) -> list[str]:
+    """Возвращает последние ссылки пользователя (до limit штук)."""
     q = (
         select(DownloadLink.url)
         .where(DownloadLink.user_id == user_id)

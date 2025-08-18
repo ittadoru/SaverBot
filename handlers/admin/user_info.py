@@ -44,7 +44,9 @@ async def show_user_history_prompt(
     builder.button(text="⬅️ Назад", callback_data="manage_users")
 
     await callback.message.edit_text(
-        "⚠️ Введите ID или username пользователя:", reply_markup=builder.as_markup()
+        "<b>🔍 Поиск пользователя</b>\n\nПожалуйста, введите <b>ID</b> или <b>username</b> пользователя для поиска.\n\n<i>Для отмены — кнопка 'Назад'.</i>",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
     )
     await callback.answer()
 
@@ -63,6 +65,7 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
     user: Optional[User] = None
 
     # Удаляем сообщение администратора с ID/username
+
     await message.delete()
 
     async with get_session() as session:
@@ -78,7 +81,8 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
             await bot.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=message_id_to_edit,
-                text="❌ Пользователь не найден.",
+                text="❌ <b>Пользователь не найден.</b>\n\nПроверьте корректность ID или username.",
+                parse_mode="HTML",
                 reply_markup=builder.as_markup(),
             )
             return
@@ -92,23 +96,23 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
 
         if expiry_date and expiry_date > now_utc:
             # Форматируем в UTC (можно позже адаптировать под локаль)
-            subscription_status = f"✅ Активна до {expiry_date.strftime('%d.%m.%Y %H:%M')} UTC"
+            subscription_status = f"✅ Активна до <b>{expiry_date.strftime('%d.%m.%Y %H:%M')}</b> UTC"
         else:
             subscription_status = "❌ Не активна"
 
         # Последние 3 ссылки
         last_links = await db_downloads.get_last_links(session, user.id, limit=3)
-        links_block = "\n".join(last_links) if last_links else "(нет)"
+        links_block = "\n".join(last_links) if last_links else "(нет недавних ссылок)"
 
         # Формирование текста сообщения
         user_info_text = (
-            f"<b>👤 Информация о пользователе</b>\n\n"
+            f"<b>👤 Карточка пользователя</b>\n\n"
             f"<b>ID:</b> <code>{user.id}</code>\n"
             f"<b>Имя:</b> {user.first_name or 'не указано'}\n"
             f"<b>Username:</b> {f'@{user.username}' if user.username else 'не указан'}\n"
             f"<b>Зарегистрирован:</b> {user.created_at.strftime('%d.%m.%Y %H:%M')}\n"
             f"<b>Подписка:</b> {subscription_status}\n\n"
-            f"<b>Последние ссылки:</b>\n<pre>{links_block}</pre>"
+            f"<b>Последние 3 ссылки:</b>\n<pre>{links_block}</pre>"
         )
 
     # Создание клавиатуры
@@ -117,7 +121,7 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
         text="🗑️ Удалить пользователя",
         callback_data=UserCallback(action="delete", user_id=user.id).pack(),
     )
-    builder.button(text="⬅️ Назад", callback_data="manage_users")
+    builder.button(text="⬅️ Назад к списку", callback_data="manage_users")
     builder.adjust(1)
 
     logging.info(
@@ -163,14 +167,14 @@ async def delete_user_handler(
         logging.info(
             "Администратор %d удалил пользователя %d", admin_id, user_id_to_delete
         )
-        text = f"✅ Пользователь <code>{user_id_to_delete}</code> успешно удалён.\n\nВыберите действие:"
+        text = f"✅ <b>Пользователь <code>{user_id_to_delete}</code> успешно удалён!</b>\n\nВыберите действие:"
     else:
         logging.warning(
             "Администратор %d не смог удалить несуществующего пользователя %d",
             admin_id,
             user_id_to_delete,
         )
-        text = f"❌ Не удалось найти и удалить пользователя <code>{user_id_to_delete}</code>.\n\nВыберите действие:"
+        text = f"❌ <b>Не удалось найти и удалить пользователя <code>{user_id_to_delete}</code>.</b>\n\nВыберите действие:"
 
     await callback.message.edit_text(
         text=text, reply_markup=builder.as_markup(), parse_mode="HTML"

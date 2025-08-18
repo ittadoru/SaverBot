@@ -2,6 +2,7 @@
 
 import logging
 
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
@@ -22,9 +23,9 @@ router = Router()
 
 
 @router.callback_query(F.data == "stats")
-async def handle_stats(callback: CallbackQuery):
+async def handle_stats(callback: CallbackQuery) -> None:
     """
-    Собирает, форматирует и отображает расширенную статистику по боту.
+    Собирает, форматирует и отображает расширенную статистику по боту с дружелюбным тоном и эмодзи.
     """
     try:
         async with get_session() as session:
@@ -50,42 +51,48 @@ async def handle_stats(callback: CallbackQuery):
     except Exception as e:
         logging.error(f"Ошибка при получении статистики: {e}", exc_info=True)
         await callback.answer(
-            "⚠️ Ошибка при получении статистики. Подробности в логах.",
+            "⚠️ Произошла ошибка при получении статистики. Пожалуйста, попробуйте позже!",
             show_alert=True
         )
         return
 
-    # --- Расчеты ---
     sub_percentage = (total_subscribers / total_users * 100) if total_users > 0 else 0
 
-    # --- Форматирование текста ---
     text = (
-        f"📊 <b>Расширенная статистика</b>\n\n"
-        f"<b><u>Общая информация:</u></b>\n"
-        f"  👥 Всего пользователей: <b>{total_users}</b>\n"
-        f"  💎 Всего подписчиков: <b>{total_subscribers}</b> ({sub_percentage:.2f}%)\n"
-        f"  🎟 Активных промокодов: <b>{active_promos}</b>\n\n"
-        f"<b><u>Активность пользователей:</u></b>\n"
-        f"  🟢 Активных сегодня: <b>{active_today}</b>\n"
-        f"  ➕ Новых за 24 часа: <b>{new_today}</b>\n"
-        f"  ➕ Новых за 7 дней: <b>{new_week}</b>\n"
-        f"  ➕ Новых за 30 дней: <b>{new_month}</b>\n\n"
-        f"<b><u>Динамика подписок (новых/продлений):</u></b>\n"
-        f"  📈 За 24 часа: <b>{subs_today}</b>\n"
-        f"  📈 За 7 дней: <b>{subs_week}</b>\n"
-        f"  📈 За 30 дней: <b>{subs_month}</b>\n\n"
+        "<b>📊 Статистика SaverBot</b>\n\n"
+        "<b>👥 Пользователи:</b> <b>{total_users}</b>\n"
+        "<b>💎 Подписчики:</b> <b>{total_subscribers}</b> ({sub_percentage:.2f}%)\n"
+        "<b>🎟️ Активных промокодов:</b> <b>{active_promos}</b>\n\n"
+        "<b>🟢 Активны сегодня:</b> <b>{active_today}</b>\n"
+        "<b>➕ Новых за 24ч:</b> <b>{new_today}</b>\n"
+        "<b>➕ Новых за 7д:</b> <b>{new_week}</b>\n"
+        "<b>➕ Новых за 30д:</b> <b>{new_month}</b>\n\n"
+        "<b>📈 Подписки:</b>\n"
+        " └ За 24ч: <b>{subs_today}</b>\n"
+        " └ За 7д: <b>{subs_week}</b>\n"
+        " └ За 30д: <b>{subs_month}</b>\n\n"
+    ).format(
+        total_users=total_users,
+        total_subscribers=total_subscribers,
+        sub_percentage=sub_percentage,
+        active_promos=active_promos,
+        active_today=active_today,
+        new_today=new_today,
+        new_week=new_week,
+        new_month=new_month,
+        subs_today=subs_today,
+        subs_week=subs_week,
+        subs_month=subs_month,
     )
 
-    # --- Топ скачиваний по платформам ---
-    def format_top(platform, count):
-        return f"<b>{platform.title()}:</b> <b>{count}</b>"
-
-    text += "<b><u>Топ скачиваний по платформам:</u></b>\n"
+    text += "<b>🏆 Топ скачиваний по платформам:</b>\n"
+    platform_emojis = {"youtube": "▶️ YouTube", "tiktok": "🎵 TikTok", "instagram": "📸 Instagram"}
     for platform in ["youtube", "tiktok", "instagram"]:
-        text += format_top(platform, top_downloads.get(platform, 0)) + "\n"
+        count = top_downloads.get(platform, 0)
+        text += f"{platform_emojis[platform]}: <b>{count}</b>\n"
 
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
+    builder.row(InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="admin_menu"))
 
     logging.info(f"Админ {callback.from_user.id} запросил расширенную статистику.")
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())

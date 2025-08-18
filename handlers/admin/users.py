@@ -35,57 +35,44 @@ class ConfirmDeleteAllCallback(CallbackData, prefix="confirm_delete_all"):
     confirm: bool
 
 
-async def _get_users_page_markup(
-    session: AsyncSession, page: int = 1
-) -> tuple[str, InlineKeyboardBuilder]:
+async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[str, InlineKeyboardBuilder]:
     """
-    Внутренняя функция для получения текста и клавиатуры для страницы пользователей.
+    Возвращает текст и клавиатуру для страницы пользователей. Упрощённая и дружелюбная версия.
     """
     total_users = await get_total_users(session)
-    total_pages = ceil(total_users / USERS_PER_PAGE)
+    total_pages = max(1, ceil(total_users / USERS_PER_PAGE))
     offset = (page - 1) * USERS_PER_PAGE
 
     user_ids = await get_all_user_ids(session, limit=USERS_PER_PAGE, offset=offset)
     users = await get_users_by_ids(session, user_ids)
 
-    text = "👥 <b>Пользователи:</b>\n\n"
     if not users:
-        text = "❌ Пользователей пока нет."
-
-    for user in users:
-        is_sub = await is_subscriber(session, user.id)
-        status_icon = "💎" if is_sub else "❌"
-        username = f" (@{user.username})" if user.username else ""
-        text += f"{status_icon} {user.id} — {user.first_name}{username}\n"
+        text = "❌ <b>Пользователей пока нет.</b>"
+    else:
+        text = "<b>👥 Список пользователей</b>\n\n"
+        for user in users:
+            is_sub = await is_subscriber(session, user.id)
+            status_icon = "💎" if is_sub else "❌"
+            username = f" (@{user.username})" if user.username else ""
+            text += f"{status_icon} <code>{user.id}</code> — {user.first_name}{username}\n"
 
     builder = InlineKeyboardBuilder()
     nav_buttons = []
     if page > 1:
-        nav_buttons.append(
-            types.InlineKeyboardButton(
-                text="◀️", callback_data=UsersPageCallback(page=page - 1).pack()
-            )
-        )
-    nav_buttons.append(
-        types.InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop")
-    )
+        nav_buttons.append(types.InlineKeyboardButton(text="◀️", callback_data=UsersPageCallback(page=page - 1).pack()))
+    nav_buttons.append(types.InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
     if page < total_pages:
-        nav_buttons.append(
-            types.InlineKeyboardButton(
-                text="▶️", callback_data=UsersPageCallback(page=page + 1).pack()
-            )
-        )
-    builder.row(*nav_buttons)
-    builder.row(
-        types.InlineKeyboardButton(text="⬅️ Назад", callback_data="manage_users")
-    )
+        nav_buttons.append(types.InlineKeyboardButton(text="▶️", callback_data=UsersPageCallback(page=page + 1).pack()))
+    if nav_buttons:
+        builder.row(*nav_buttons)
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад к управлению", callback_data="manage_users"))
     return text, builder
 
 
 @router.callback_query(F.data == "all_users")
-async def list_users_handler(callback: types.CallbackQuery):
+async def list_users_handler(callback: types.CallbackQuery) -> None:
     """
-    Показывает первую страницу списка всех пользователей с пагинацией.
+    Показывает первую страницу списка всех пользователей с пагинацией и дружелюбным текстом.
     """
     async with get_session() as session:
         text, builder = await _get_users_page_markup(session, page=1)
@@ -97,9 +84,7 @@ async def list_users_handler(callback: types.CallbackQuery):
 
 
 @router.callback_query(UsersPageCallback.filter())
-async def paginate_users_handler(
-    callback: types.CallbackQuery, callback_data: UsersPageCallback
-):
+async def paginate_users_handler(callback: types.CallbackQuery, callback_data: UsersPageCallback) -> None:
     """
     Обрабатывает переключение страниц списка пользователей.
     """
@@ -118,13 +103,13 @@ async def paginate_users_handler(
 
 
 @router.callback_query(F.data == "delete_all_users")
-async def confirm_delete_all_users_handler(callback: types.CallbackQuery):
+async def confirm_delete_all_users_handler(callback: types.CallbackQuery) -> None:
     """
-    Запрашивает подтверждение на удаление всех пользователей.
+    Запрашивает подтверждение на удаление всех пользователей с дружелюбным текстом и эмодзи.
     """
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="✅ Да, удалить всех",
+        text="🗑️ Да, удалить всех!",
         callback_data=ConfirmDeleteAllCallback(confirm=True).pack(),
     )
     builder.button(
@@ -132,8 +117,8 @@ async def confirm_delete_all_users_handler(callback: types.CallbackQuery):
     )
     builder.adjust(1)
     await callback.message.edit_text(
-        "<b>⚠️ Вы уверены, что хотите удалить ВСЕХ пользователей?</b>\n\n"
-        "Это действие необратимо и приведёт к полной потере данных о пользователях и их подписках.",
+        "<b>⚠️ Вы уверены, что хотите удалить <u>ВСЕХ</u> пользователей?</b>\n\n"
+        "Это действие <b>необратимо</b> и приведёт к полной потере данных о пользователях и их подписках.",
         parse_mode="HTML",
         reply_markup=builder.as_markup(),
     )
@@ -141,25 +126,22 @@ async def confirm_delete_all_users_handler(callback: types.CallbackQuery):
 
 
 @router.callback_query(ConfirmDeleteAllCallback.filter())
-async def delete_all_users_handler(
-    callback: types.CallbackQuery, callback_data: ConfirmDeleteAllCallback
-):
+async def delete_all_users_handler(callback: types.CallbackQuery, callback_data: ConfirmDeleteAllCallback) -> None:
     """
-    Обрабатывает подтверждение или отмену удаления всех пользователей.
+    Обрабатывает подтверждение или отмену удаления всех пользователей, дружелюбно и с эмодзи.
     """
     if not callback_data.confirm:
-        await callback.message.edit_text("Удаление отменено.")
-        await list_users_handler(callback)  # Возвращаемся к списку
+        await callback.message.edit_text("❌ <b>Удаление отменено.</b>", parse_mode="HTML")
+        await list_users_handler(callback)
         return
 
     async with get_session() as session:
         user_ids = await get_all_user_ids(session)
         for uid in user_ids:
             await delete_user_by_id(session, uid)
-        # Коммит не нужен, так как delete_user_by_id уже его делает
 
     logger.warning(
         "Администратор %d удалил ВСЕХ пользователей.", callback.from_user.id
     )
-    await callback.answer("✅ Все пользователи были успешно удалены.", show_alert=True)
-    await callback.message.delete()  # Удаляем сообщение с подтверждением
+    await callback.answer("✅ <b>Все пользователи были успешно удалены!</b>", show_alert=True)
+    await callback.message.delete()

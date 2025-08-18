@@ -24,31 +24,36 @@ router.callback_query.filter(F.from_user.id.in_(ADMINS))
 
 
 async def _channels_menu_text(session) -> str:
+    """
+    Формирует текст меню управления каналами с эмодзи и статусами.
+    """
     enabled = await is_channel_guard_enabled(session)
     channels = await list_channels(session)
-    lines = [f"🌐 Глобальное ограничение: {'ON' if enabled else 'OFF'}", "", "Список каналов:"]
+    lines = [
+        f"🌐 Ограничение: {'ВКЛ' if enabled else 'ВЫКЛ'}",
+        "",
+        "📋 <b>Список каналов</b>:"
+    ]
     if not channels:
         lines.append("— пока пусто")
     else:
         for ch in channels:
             lines.append(
-                f"#{ch.id} @%s | %s | req=%s act=%s" % (
-                    ch.username,
-                    ch.title or '-',
-                    '✅' if ch.is_required else '❌',
-                    '✅' if ch.active else '❌'
-                )
+                f"#{ch.id} @{ch.username} | {ch.title or '-'} | Обязателен: {'✅' if ch.is_required else '❌'} | Активен: {'✅' if ch.active else '❌'}"
             )
     return '\n'.join(lines)
 
 
 def _channels_menu_kb(channels, guard_on: bool):
+    """
+    Формирует клавиатуру для меню каналов с эмодзи.
+    """
     b = InlineKeyboardBuilder()
     for ch in channels:
         b.row(
-            InlineKeyboardButton(text=f"@{ch.username}", callback_data=f"noop"),
-            InlineKeyboardButton(text=("ON" if ch.active else "OFF"), callback_data=f"ch_toggle_act:{ch.id}"),
-            InlineKeyboardButton(text="✖", callback_data=f"ch_del:{ch.id}"),
+            InlineKeyboardButton(text=f"📢 @{ch.username}", callback_data=f"noop"),
+            InlineKeyboardButton(text=("🟢" if ch.active else "🔴"), callback_data=f"ch_toggle_act:{ch.id}"),
+            InlineKeyboardButton(text="✖️", callback_data=f"ch_del:{ch.id}"),
         )
     b.row(InlineKeyboardButton(text="➕ Добавить", callback_data="ch_add_start"))
     b.row(InlineKeyboardButton(text=("🌐 Выкл" if guard_on else "🌐 Вкл"), callback_data="ch_toggle_guard"))
@@ -58,15 +63,18 @@ def _channels_menu_kb(channels, guard_on: bool):
 
 @router.callback_query(F.data == "channels_menu")
 async def show_channels_menu(callback: CallbackQuery):
+    """
+    Показывает меню управления каналами с клавиатурой и статусами.
+    """
     try:
         async with get_session() as session:
             channels = await list_channels(session)
             text = await _channels_menu_text(session)
             guard_on = await is_channel_guard_enabled(session)
-        await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on))
+        await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     except ProgrammingError:
         await callback.message.edit_text(
-            "Таблицы каналов ещё не созданы. Примените миграции (alembic upgrade head) или перезапустите контейнер app."
+            "⚠️ Таблицы каналов ещё не созданы. Примените миграции (alembic upgrade head) или перезапустите контейнер app."
         )
     await callback.answer()
 
@@ -74,48 +82,60 @@ async def show_channels_menu(callback: CallbackQuery):
 # --- Toggle handlers ---
 @router.callback_query(F.data.startswith("ch_toggle_req:"))
 async def toggle_required(callback: CallbackQuery):
+    """
+    Переключает обязательность канала.
+    """
     ch_id = int(callback.data.split(":", 1)[1])
     async with get_session() as session:
         await toggle_channel_required(session, ch_id)
         channels = await list_channels(session)
         text = await _channels_menu_text(session)
         guard_on = await is_channel_guard_enabled(session)
-    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on))
+    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("ch_toggle_act:"))
 async def toggle_active(callback: CallbackQuery):
+    """
+    Переключает активность канала.
+    """
     ch_id = int(callback.data.split(":", 1)[1])
     async with get_session() as session:
         await toggle_channel_active(session, ch_id)
         channels = await list_channels(session)
         text = await _channels_menu_text(session)
         guard_on = await is_channel_guard_enabled(session)
-    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on))
+    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("ch_del:"))
 async def delete_ch(callback: CallbackQuery):
+    """
+    Удаляет канал из списка.
+    """
     ch_id = int(callback.data.split(":", 1)[1])
     async with get_session() as session:
         await delete_channel(session, ch_id)
         channels = await list_channels(session)
         text = await _channels_menu_text(session)
         guard_on = await is_channel_guard_enabled(session)
-    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on))
+    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     await callback.answer()
 
 
 @router.callback_query(F.data == "ch_toggle_guard")
 async def toggle_guard(callback: CallbackQuery):
+    """
+    Включает или выключает глобальное ограничение.
+    """
     async with get_session() as session:
         await toggle_channel_guard(session)
         channels = await list_channels(session)
         text = await _channels_menu_text(session)
         guard_on = await is_channel_guard_enabled(session)
-    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on))
+    await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     await callback.answer()
 
 
@@ -123,8 +143,11 @@ async def toggle_guard(callback: CallbackQuery):
 
 @router.callback_query(F.data == "ch_add_start")
 async def add_start(callback: CallbackQuery, state: FSMContext):
+    """
+    Запускает процесс добавления нового канала.
+    """
     await callback.message.answer(
-        "Введите @username канала (перешлите сообщение из него — пока поддерживаем только @username):\n⬅️ /cancel для отмены"
+        "➕ Введите <b>@username</b> канала (или перешлите сообщение из него).\n\nДля отмены — /cancel"
     )
     await state.set_state(ChannelStates.waiting_for_username)
     await callback.answer()
@@ -133,14 +156,17 @@ async def add_start(callback: CallbackQuery, state: FSMContext):
 # Обработчик текстового сообщения для добавления канала
 @router.message(ChannelStates.waiting_for_username)
 async def process_channel_username(message: Message, state: FSMContext):
+    """
+    Обрабатывает ввод username для добавления канала.
+    """
     username = message.text.strip().lstrip("@")
     if not username.isalnum():
-        await message.answer("Некорректный username. Введите ещё раз или /cancel для отмены.")
+        await message.answer("❌ Некорректный username. Попробуйте ещё раз или /cancel для отмены.")
         return
     async with get_session() as session:
         try:
             await add_channel(session, username)
-            await message.answer(f"Канал @{username} добавлен.")
+            await message.answer(f"✅ Канал <b>@{username}</b> успешно добавлен!")
         except Exception as e:
-            await message.answer(f"Ошибка при добавлении: {e}")
+            await message.answer(f"⚠️ Ошибка при добавлении: {e}")
     await state.clear()

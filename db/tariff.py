@@ -1,18 +1,32 @@
-"""Модель тарифного плана и CRUD-операции для управления тарифами."""
+"""
+Модель тарифного плана и CRUD-операции для управления тарифами.
+Включает подробные docstring, type hints, __repr__ и безопасную обработку транзакций.
+"""
+
 
 from sqlalchemy import Column, Integer, String, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from db.base import Base
 
 
 class Tariff(Base):
-    """Представляет тарифный план подписки."""
+    """
+    Представляет тарифный план подписки.
+    id: ID тарифа
+    name: название тарифа
+    price: цена тарифа
+    duration_days: длительность в днях
+    """
     __tablename__ = 'tariffs'
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     price = Column(Integer, nullable=False)
     duration_days = Column(Integer, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<Tariff id={self.id} name={self.name} price={self.price} duration_days={self.duration_days}>"
 
 
 async def create_tariff(
@@ -23,8 +37,12 @@ async def create_tariff(
     """
     new_tariff = Tariff(name=name, price=price, duration_days=duration_days)
     session.add(new_tariff)
-    await session.commit()
-    await session.refresh(new_tariff)
+    try:
+        await session.commit()
+        await session.refresh(new_tariff)
+    except SQLAlchemyError:
+        await session.rollback()
+        raise
     return new_tariff
 
 
@@ -36,7 +54,9 @@ async def update_tariff(
     price: int | None = None,
     duration_days: int | None = None,
 ) -> Tariff | None:
-    """Обновляет указанные поля тарифа. Возвращает обновлённый тариф или None."""
+    """
+    Обновляет указанные поля тарифа. Возвращает обновлённый тариф или None.
+    """
     tariff = await session.get(Tariff, tariff_id)
     if not tariff:
         return None
@@ -46,8 +66,12 @@ async def update_tariff(
         tariff.price = price
     if duration_days is not None:
         tariff.duration_days = duration_days
-    await session.commit()
-    await session.refresh(tariff)
+    try:
+        await session.commit()
+        await session.refresh(tariff)
+    except SQLAlchemyError:
+        await session.rollback()
+        raise
     return tariff
 
 
@@ -56,11 +80,15 @@ async def delete_tariff(session: AsyncSession, tariff_id: int) -> bool:
     Удаляет тариф по его ID.
     """
     tariff = await session.get(Tariff, tariff_id)
-    if tariff:
+    if not tariff:
+        return False
+    try:
         await session.delete(tariff)
         await session.commit()
-        return True
-    return False
+    except SQLAlchemyError:
+        await session.rollback()
+        return False
+    return True
 
 
 async def get_tariff_by_id(session: AsyncSession, tariff_id: int) -> Tariff | None:
