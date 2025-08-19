@@ -22,8 +22,8 @@ from db.downloads import get_daily_downloads, increment_daily_download, incremen
 from db.platforms import increment_platform_download
 from config import PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB, DAILY_DOWNLOAD_LIMITS, FORMAT_SELECTION_TIMEOUT
 
-router = Router()
 
+router = Router()
 
 # FSMContext-based busy/timeout management
 BUSY_KEY = "busy"
