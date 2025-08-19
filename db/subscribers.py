@@ -179,3 +179,13 @@ async def mark_payment_processed(session: AsyncSession, payment_id: str, user_id
         await session.commit()
     except Exception:
         await session.rollback()
+
+async def get_active_subscribers(session: AsyncSession) -> list[Subscriber]:
+    """
+    Возвращает список подписчиков с активной (не истекшей) подпиской.
+    """
+    now = datetime.now(timezone.utc)
+    result = await session.execute(
+        select(Subscriber).where(Subscriber.expire_at > now)
+    )
+    return list(result.scalars().all())

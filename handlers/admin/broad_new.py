@@ -5,18 +5,18 @@
 from aiogram import Router
 
 from db.base import get_session
-from db.users import get_user_ids_never_paid
+from db.users import get_all_user_ids
 from utils.broadcast_base import register_broadcast_constructor
 
 router = Router()
 
 
-async def _audience_never_paid() -> list[int]:
+async def _audience_all() -> list[int]:
     """
-    Возвращает user_id пользователей, которые ни разу не платили.
+    Возвращает список user_id всех пользователей для рассылки.
     """
     async with get_session() as session:
-        return await get_user_ids_never_paid(session)
+        return await get_all_user_ids(session)
 
 
 register_broadcast_constructor(
@@ -28,5 +28,5 @@ register_broadcast_constructor(
     start_status_text="⏳ Рассылка началась! По завершении придёт отчёт.",
     summary_title="🎉 Trial-рассылка завершена!",
     total_label="Пользователей (никогда не платили)",
-    audience_fetcher=_audience_never_paid,
+    audience_fetcher=_audience_all,
 )

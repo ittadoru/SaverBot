@@ -17,6 +17,7 @@ from db.base import get_session
 from db.users import User
 from states.history import HistoryStates
 
+
 router = Router()
 router.message.filter(F.from_user.id.in_(ADMINS))
 router.callback_query.filter(F.from_user.id.in_(ADMINS))
@@ -180,4 +181,3 @@ async def delete_user_handler(
         text=text, reply_markup=builder.as_markup(), parse_mode="HTML"
     )
     await callback.answer()
-

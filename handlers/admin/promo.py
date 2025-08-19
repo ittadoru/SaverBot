@@ -13,8 +13,9 @@ import logging
 from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
-from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from utils.keyboards import pagination_keyboard
 
 from config import ADMINS
 from db.base import get_session
@@ -141,17 +142,14 @@ async def remove_promocode_page(callback: CallbackQuery, state: FSMContext) -> N
             text=f"🎟️ {p.code} — {p.duration_days} дн. (ост: {p.uses_left})",
             callback_data=f"remove_promo:{p.code}"
         )
-    # Кнопки навигации
-    nav_buttons = []
-    if page > 1:
-        nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"remove_promocode_page:{page-1}"))
-    nav_buttons.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
-    if page < total_pages:
-        nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"remove_promocode_page:{page+1}"))
-    if nav_buttons:
-        builder.row(*nav_buttons)
-    builder.row(InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="promocode_menu_show"))
     builder.adjust(1)
+    nav = pagination_keyboard(page, total_pages, prefix="remove_promocode_page")
+    # Добавляем кнопку назад
+    from aiogram.types import InlineKeyboardMarkup
+    nav_markup = nav.inline_keyboard if isinstance(nav, InlineKeyboardMarkup) else nav
+    builder.row(*nav_markup[-1])  # Кнопка назад
+    for row in nav_markup[:-1]:
+        builder.row(*row)
     await callback.message.edit_text(
         "<b>🗑️ Выберите промокод для удаления:</b>",
         parse_mode="HTML",
@@ -248,17 +246,8 @@ async def show_all_promocodes_page(callback: CallbackQuery) -> None:
         )
     else:
         text = "❌ <b>Нет активных промокодов.</b>\n\nДобавьте новый промокод, чтобы начать!"
-    builder = InlineKeyboardBuilder()
-    nav_buttons = []
-    if page > 1:
-        nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"all_promocodes_page:{page-1}"))
-    nav_buttons.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
-    if page < total_pages:
-        nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"all_promocodes_page:{page+1}"))
-    if nav_buttons:
-        builder.row(*nav_buttons)
-    builder.row(InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="promocode_menu_show"))
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    nav = pagination_keyboard(page, total_pages, prefix="all_promocodes_page", extra_buttons=[("⬅️ Назад в меню", "promocode_menu_show")])
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=nav)
     await callback.answer()
 
 @router.callback_query(F.data == "all_promocodes")

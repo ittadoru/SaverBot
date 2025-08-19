@@ -2,9 +2,6 @@ env/
 
 .gitignore
 
-log/*
-
-
 **/__pycache__/
 **/*.pyc
 **/*.pyo

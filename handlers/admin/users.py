@@ -5,7 +5,8 @@ from math import ceil
 
 from aiogram import F, Router, types
 from aiogram.filters.callback_data import CallbackData
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
+from utils.keyboards import pagination_keyboard, back_button
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import ADMINS
@@ -34,6 +35,22 @@ class ConfirmDeleteAllCallback(CallbackData, prefix="confirm_delete_all"):
 
     confirm: bool
 
+async def manage_users_menu(callback: types.CallbackQuery):
+    """Отображает меню управления пользователями."""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="👥 Все пользователи", callback_data="all_users"))
+    builder.row(InlineKeyboardButton(text="🏆 Топ рефералов", callback_data="top_referrals"))
+    builder.row(InlineKeyboardButton(text="🔍 Поиск пользователя", callback_data="user_history_start"))
+    builder.row(InlineKeyboardButton(text="🗑️ Удалить всех", callback_data="delete_all_users"))
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
+
+    await callback.message.edit_text(
+        "👥 <b>Пользователи</b>\n\nВыберите действие:",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
 
 async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[str, InlineKeyboardBuilder]:
     """
@@ -56,17 +73,8 @@ async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[
             username = f" (@{user.username})" if user.username else ""
             text += f"{status_icon} <code>{user.id}</code> — {user.first_name}{username}\n"
 
-    builder = InlineKeyboardBuilder()
-    nav_buttons = []
-    if page > 1:
-        nav_buttons.append(types.InlineKeyboardButton(text="◀️", callback_data=UsersPageCallback(page=page - 1).pack()))
-    nav_buttons.append(types.InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
-    if page < total_pages:
-        nav_buttons.append(types.InlineKeyboardButton(text="▶️", callback_data=UsersPageCallback(page=page + 1).pack()))
-    if nav_buttons:
-        builder.row(*nav_buttons)
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад к управлению", callback_data="manage_users"))
-    return text, builder
+    nav = pagination_keyboard(page, total_pages, prefix="users_page", extra_buttons=[("⬅️ Назад к управлению", "manage_users")])
+    return text, nav
 
 
 @router.callback_query(F.data == "all_users")
@@ -145,3 +153,4 @@ async def delete_all_users_handler(callback: types.CallbackQuery, callback_data:
     )
     await callback.answer("✅ <b>Все пользователи были успешно удалены!</b>", show_alert=True)
     await callback.message.delete()
+

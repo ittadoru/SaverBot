@@ -18,7 +18,6 @@ async def _audience_all() -> list[int]:
     async with get_session() as session:
         return await get_all_user_ids(session)
 
-
 register_broadcast_constructor(
     router,
     start_trigger="broadcast_start",

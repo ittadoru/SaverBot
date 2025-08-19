@@ -4,11 +4,12 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
+from utils.delete_downloads import delete_all_files_in_downloads
 
 from config import ADMINS
 
-router = Router()
 
+router = Router()
 
 def get_admin_menu_keyboard():
     """Формирует и возвращает клавиатуру главной админ-панели."""
@@ -55,22 +56,11 @@ async def promocode_menu_entry(callback: CallbackQuery):
     await show_promo_menu(callback)
 
 
-
 @router.callback_query(F.data == "manage_users")
-async def manage_users_menu(callback: CallbackQuery):
-    """Отображает меню управления пользователями."""
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="👥 Все пользователи", callback_data="all_users"))
-    builder.row(InlineKeyboardButton(text="🔍 Поиск пользователя", callback_data="user_history_start"))
-    builder.row(InlineKeyboardButton(text="🗑️ Удалить всех", callback_data="delete_all_users"))
-    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
-
-    await callback.message.edit_text(
-        "👥 <b>Пользователи</b>\n\nВыберите действие:",
-        reply_markup=builder.as_markup(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
+async def manage_users_entry(callback: CallbackQuery):
+    """Перехватывает вход в меню управления пользователями и вызывает основную функцию отображения."""
+    from .users import manage_users_menu
+    await manage_users_menu(callback)
 
 
 @router.callback_query(F.data == "admin_menu")
@@ -84,10 +74,6 @@ async def back_to_admin_menu(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
-
-
-# Обработчик для удаления всех файлов из downloads
-from utils.delete_downloads import delete_all_files_in_downloads
 
 @router.callback_query(F.data == "clear_downloads")
 async def clear_downloads_handler(callback: CallbackQuery):

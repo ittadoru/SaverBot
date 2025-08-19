@@ -10,6 +10,8 @@ from .export_logs import router as log_router
 from .tariff import router as tariff_router
 from .export_tables import router as table_export_router
 from .channels import router as channels_router
+from .top_refferals import router as top_referrals_router
+
 
 routers = [
     menu_router,
@@ -23,5 +25,6 @@ routers = [
     log_router,
     tariff_router,
     table_export_router,
-    channels_router
+    channels_router,
+    top_referrals_router,
 ]

@@ -57,7 +57,7 @@ def _build_profile_text(user_id: int, name: str, username: str, status: str, tot
         stats += f"    {p.title()}: <b>{platform_stats.get(p, 0)}</b>\n"
     return stats
 
-def _build_referral_text(ref_count: int, level: int, to_next: str) -> str:
+def _build_referral_text(ref_count: int, level: int, to_next: str, progress_bar: str = "") -> str:
     level_names = {
         1: "1 (базовый)",
         2: "2 (1 реферал)",
@@ -66,9 +66,10 @@ def _build_referral_text(ref_count: int, level: int, to_next: str) -> str:
         5: "5 (30 рефералов, бессрочная подписка)"
     }
     return (
-        f"\n<b>Реферальная программа:</b>"
+        f"\n\n<b>Реферальная программа:</b>\n"
         f"\n<b>Твой уровень:</b> {level_names.get(level, '—')}"
         f"\n<b>Рефералов:</b> {ref_count}"
+        f"\n{progress_bar}"
         f"\n{to_next}\n"
     )
 
@@ -91,11 +92,20 @@ async def show_profile(callback: CallbackQuery) -> None:
         # Новая логика перехода между уровнями
         next_level_map = {1: 2, 2: 3, 3: 4, 4: 5, 5: None}
         next_level_reqs = {2: 1, 3: 3, 4: 10, 5: 30}
+        prev_level_min = {1: 0, 2: 1, 3: 3, 4: 10, 5: 30}[level]
         next_level = next_level_map.get(level)
         if next_level:
+            need = next_level_reqs[next_level] - prev_level_min
+            have = max(0, ref_count - prev_level_min)
             to_next = f"До следующего уровня: {next_level_reqs[next_level] - ref_count} рефералов"
+            # Прогресс-бар
+            bar_len = 8
+            filled = min(bar_len, int(bar_len * have / need)) if need > 0 else bar_len
+            empty = bar_len - filled
+            progress_bar = f"Прогресс: {'🟩'*filled}{'⬜️'*empty} ({have}/{need})"
         else:
             to_next = "Максимальный уровень!"
+            progress_bar = ""
 
     # Если есть активная подписка — всегда безлимит
     now = datetime.now(expire_at.tzinfo) if expire_at else None
@@ -109,7 +119,7 @@ async def show_profile(callback: CallbackQuery) -> None:
             left = max(0, limit - today)
     status = _format_subscription_status(expire_at)
     text = _build_profile_text(user_id, name, username, status, total, today, left, platform_stats)
-    text += _build_referral_text(ref_count, level, to_next)
+    text += _build_referral_text(ref_count, level, to_next, progress_bar)
 
     current = (callback.message.text or "").strip()
     if current == text.strip():
