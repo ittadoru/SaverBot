@@ -20,12 +20,9 @@ from db.users import log_user_activity, add_or_update_user
 from db.channels import is_channel_guard_enabled, get_required_active_channels, check_user_memberships
 from db.downloads import get_daily_downloads, increment_daily_download, increment_download, add_download_link
 from db.platforms import increment_platform_download
-from config import PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
+from config import PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB, DAILY_DOWNLOAD_LIMITS, FORMAT_SELECTION_TIMEOUT
 
 router = Router()
-
-FREE_DAILY_LIMIT = 10
-FORMAT_SELECTION_TIMEOUT = 30  # seconds to wait for subscriber to pick YouTube format
 
 
 # FSMContext-based busy/timeout management
@@ -162,13 +159,11 @@ async def check_download_limit(message: types.Message, user_id: int) -> bool:
         daily = await get_daily_downloads(session, user_id)
         sub = await is_subscriber(session, user_id)
         _, level, _ = await get_referral_stats(session, user_id)
-    if level >= 3 or sub:
+    limit = DAILY_DOWNLOAD_LIMITS.get(level)
+    if sub or limit is None:
         return False
-    if level == 2 and daily >= FREE_DAILY_LIMIT*2:
-        await message.answer('⚠️ Лимит 20 скачиваний в день. Оформите подписку для безлимита или повысьте реферальный уровень.')
-        return True
-    if daily >= FREE_DAILY_LIMIT:
-        await message.answer('⚠️ Лимит 10 скачиваний в день. Оформите подписку для безлимита или повысьте реферальный уровень.')
+    if daily >= limit:
+        await message.answer(f'⚠️ Лимит {limit} скачиваний в день. Оформите подписку для безлимита или повысьте реферальный уровень.')
         return True
     return False
 

@@ -22,7 +22,11 @@ BUY_PREFIX = "buy_tariff:"
 PARSE_MODE = "HTML"
 SUBSCRIBE_HEADER = (
     "<b>💎 Преимущества подписки:</b>\n"
-    "• Приоритетная поддержка\n\n"
+    "• Безлимит на скачивания и размер файлов\n"
+    "• Нет рекламы и ограничений\n"
+    "• VIP-статус и ранний доступ к новым функциям\n"
+    "• Приоритетная поддержка\n"
+    "• Бонусы и подарки для подписчиков\n\n"
     "Выберите вариант подписки:"
 )
 
@@ -55,12 +59,9 @@ async def _show_subscribe_menu(message: types.Message, callback: types.CallbackQ
         tariffs = await get_all_tariffs(session)
 
     if not tariffs:
-        kb = InlineKeyboardBuilder()
-        kb.button(text="⬅️ Назад", callback_data="profile")
         with suppress(TelegramAPIError):
-            await message.edit_text(
+            await message.answer(
                 "Пока нет доступных тарифов.",
-                reply_markup=kb.as_markup(),
                 parse_mode=PARSE_MODE,
             )
         if callback:

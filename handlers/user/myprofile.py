@@ -10,6 +10,7 @@ from db.subscribers import get_subscriber_expiry
 from db.downloads import get_total_downloads, get_daily_downloads
 from db.platforms import get_platform_counts, PLATFORMS
 from handlers.user.referral import get_referral_stats
+from config import DAILY_DOWNLOAD_LIMITS
 
 
 logger = logging.getLogger(__name__)
@@ -58,15 +59,15 @@ def _build_profile_text(user_id: int, name: str, username: str, status: str, tot
 
 def _build_referral_text(ref_count: int, level: int, to_next: str) -> str:
     level_names = {
-        0: "Нет уровня",
-        1: "1",
-        2: "2 (увеличенный лимит)",
-        3: "3 (VIP)",
-        4: "4 (бессрочная подписка)"
+        1: "1 (базовый)",
+        2: "2 (1 реферал)",
+        3: "3 (3 реферала, бонус)",
+        4: "4 (10 рефералов, VIP)",
+        5: "5 (30 рефералов, бессрочная подписка)"
     }
     return (
         f"\n<b>Реферальная программа:</b>"
-        f"\n<b>Твой уровень:</b> {level_names[level]}"
+        f"\n<b>Твой уровень:</b> {level_names.get(level, '—')}"
         f"\n<b>Рефералов:</b> {ref_count}"
         f"\n{to_next}\n"
     )
@@ -87,10 +88,25 @@ async def show_profile(callback: CallbackQuery) -> None:
         platform_stats = await get_platform_counts(session, user_id)
         # --- Реферальная информация ---
         ref_count, level, _ = await get_referral_stats(session, user_id)
-        next_level = {0: 1, 1: 3, 2: 10, 3: 30, 4: None}[level]
-        to_next = f"До следующего уровня: {next_level - ref_count} рефералов" if next_level else "Максимальный уровень!"
+        # Новая логика перехода между уровнями
+        next_level_map = {1: 2, 2: 3, 3: 4, 4: 5, 5: None}
+        next_level_reqs = {2: 1, 3: 3, 4: 10, 5: 30}
+        next_level = next_level_map.get(level)
+        if next_level:
+            to_next = f"До следующего уровня: {next_level_reqs[next_level] - ref_count} рефералов"
+        else:
+            to_next = "Максимальный уровень!"
 
-    left = max(0, 20 - today)
+    # Если есть активная подписка — всегда безлимит
+    now = datetime.now(expire_at.tzinfo) if expire_at else None
+    if expire_at and expire_at > now:
+        left = '∞'
+    else:
+        limit = DAILY_DOWNLOAD_LIMITS.get(level)
+        if limit is None:
+            left = '∞'
+        else:
+            left = max(0, limit - today)
     status = _format_subscription_status(expire_at)
     text = _build_profile_text(user_id, name, username, status, total, today, left, platform_stats)
     text += _build_referral_text(ref_count, level, to_next)

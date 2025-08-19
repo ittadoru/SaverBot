@@ -32,7 +32,22 @@ DOMAIN = os.getenv("DOMAIN")              # Базовый домен (для с
 # Загрузка файлов
 # ---------------------------------------------------------------------------
 DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "downloads")
+
+# ---------------------------------------------------------------------------
+# Лимиты
+# ---------------------------------------------------------------------------
+DAILY_DOWNLOAD_LIMITS = {
+    1: 10,    # 1 уровень (по умолчанию)
+    2: 15,    # 2 уровень (1+ реферал)
+    3: 20,    # 3 уровень (3+ реферала)
+    4: None,  # 4 уровень (10+ рефералов, VIP) — безлимит
+    5: None,  # 5 уровень (30+ рефералов, бессрочная подписка) — безлимит
+}
 MAX_FREE_VIDEO_MB = int(os.getenv("MAX_FREE_VIDEO_MB"))  # бизнес-лимит для бесплатных пользователей (можно менять)
+FORMAT_SELECTION_TIMEOUT = 30
+
+SUBSCRIPTION_YEARS_FOR_LIFETIME = 100
+SUBSCRIPTION_LIFETIME_DAYS = SUBSCRIPTION_YEARS_FOR_LIFETIME * 365
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 

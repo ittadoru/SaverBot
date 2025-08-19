@@ -1,3 +1,4 @@
+from aiogram.filters import Command
 """
 Обработчики реферальной системы пользователя: генерация ссылки, просмотр своих рефералов.
 """
@@ -12,18 +13,25 @@ from sqlalchemy import select, func
 
 router = Router()
 
-@router.callback_query(lambda c: c.data == "invite_friend")
-async def invite_friend(callback: CallbackQuery):
-    """Отправляет пользователю его персональную реферальную ссылку."""
-    bot_username = (await callback.bot.me()).username
-    user_id = callback.from_user.id
+
+# Универсальная функция для отправки реферальной ссылки
+async def send_invite_link(user_id, bot, message_or_callback):
+    bot_username = (await bot.me()).username
     ref_link = get_ref_link(bot_username, user_id)
     text = (
         "👥 <b>Пригласи друга и получи бонус!</b>\n\n"
         "Отправь эту ссылку друзьям — за каждого нового пользователя ты получишь приятный бонус!\n\n"
         f"{ref_link}"
     )
-    await callback.message.answer(text, parse_mode="HTML")
+    await message_or_callback.answer(text, parse_mode="HTML")
+
+@router.callback_query(lambda c: c.data == "invite_friend")
+async def invite_friend_callback(callback: CallbackQuery):
+    await send_invite_link(callback.from_user.id, callback.bot, callback.message)
+
+@router.message(Command("invite"))
+async def invite_friend_command(message):
+    await send_invite_link(message.from_user.id, message.bot, message)
 
 @router.callback_query(lambda c: c.data == "my_referrals")
 async def my_referrals(callback: CallbackQuery):
@@ -48,7 +56,7 @@ async def get_referral_stats(session, user_id: int):
     """
     Возвращает (count, level, is_vip) для пользователя:
     - count: количество рефералов
-    - level: 0 (нет), 1 (1-2), 2 (3-9), 3 (10-29), 4 (30+)
+    - level: 1 (по умолчанию), 2 (1+), 3 (3+), 4 (10+), 5 (30+)
     - is_vip: True если уровень 3 или выше
     """
     result = await session.execute(
@@ -56,14 +64,14 @@ async def get_referral_stats(session, user_id: int):
     )
     count = result.scalar_one()
     if count >= 30:
-        level = 4
+        level = 5
     elif count >= 10:
-        level = 3
+        level = 4
     elif count >= 3:
-        level = 2
+        level = 3
     elif count >= 1:
-        level = 1
+        level = 2
     else:
-        level = 0
+        level = 1
     is_vip = level >= 3
     return count, level, is_vip

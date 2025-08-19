@@ -19,67 +19,73 @@ class LogCallback(CallbackData, prefix="log_select"):
 router = Router()
 
 
-def get_log_files():
-    """
-    Сканирует директорию логов и возвращает отсортированный список файлов.
-    Текущий лог 'bot.log' всегда первый, за ним идут архивные.
-    """
+def get_current_log():
+    """Возвращает имя текущего лога, если есть."""
+    if not os.path.exists(LOG_DIR):
+        return None
+    files = os.listdir(LOG_DIR)
+    return "bot.log" if "bot.log" in files else None
+
+def get_archived_logs():
+    """Возвращает отсортированный список архивных логов формата bot_YYYY-MM-DD.log."""
     if not os.path.exists(LOG_DIR):
         return []
-
     files = os.listdir(LOG_DIR)
-
-    # Паттерн для архивных логов, создаваемых TimedRotatingFileHandler
-    # Например, 'bot.log.2023-10-27'
-    log_pattern = re.compile(r"^bot\.log\.(\d{4}-\d{2}-\d{2})$")
-
-    current_log = "bot.log"
+    log_pattern = re.compile(r"^bot_(\d{4})-(\d{2})-(\d{2})\.log$")
     archived_logs = sorted(
         [f for f in files if log_pattern.match(f)],
         reverse=True
     )
-
-    # Формируем итоговый список
-    log_files = []
-    if current_log in files:
-        log_files.append(current_log)
-
-    log_files.extend(archived_logs)
-
-    return log_files
+    return archived_logs
 
 
+
+# Главное меню экспорта логов
 @router.callback_query(F.data == "get_logs")
-async def show_log_menu(callback: CallbackQuery):
-    """
-    Показывает меню со всеми доступными файлами логов в виде единого списка.
-    """
-    log_files = get_log_files()
-
-    if not log_files:
-        await callback.answer("🗂️ Логи не найдены.", show_alert=True)
-        return
-
+async def show_log_main_menu(callback: CallbackQuery):
+    """Показывает главное меню экспорта логов: текущий лог и архивные логи."""
     builder = InlineKeyboardBuilder()
+    current_log = get_current_log()
+    if current_log:
+        builder.button(
+            text="📄 Текущий лог",
+            callback_data=LogCallback(filename=current_log).pack()
+        )
+    builder.row(InlineKeyboardButton(text="🗂️ Архивные логи", callback_data="show_archived_logs"))
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
 
-    for filename in log_files:
-        # Для 'bot.log' показываем "Текущий", для остальных - дату
-        if filename == "bot.log":
-            display_name = "📄 Текущий лог"
+    await callback.message.edit_text(
+        "📝 <b>Экспорт логов</b>\n\nВыберите действие:",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+# Меню архивных логов
+@router.callback_query(F.data == "show_archived_logs")
+async def show_archived_logs_menu(callback: CallbackQuery):
+    """Показывает меню с архивными логами (только даты)."""
+    archived_logs = get_archived_logs()
+    builder = InlineKeyboardBuilder()
+    if not archived_logs:
+        await callback.answer("Архивных логов нет.", show_alert=True)
+        return
+    for filename in archived_logs:
+        m = re.match(r"bot_(\d{4})-(\d{2})-(\d{2})\.log", filename)
+        if m:
+            date_str = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+            display_name = date_str
         else:
-            date_str = filename.replace("bot.log.", "")
-            display_name = f"🗂️ Архив {date_str}"
-
+            display_name = filename
         builder.button(
             text=display_name,
             callback_data=LogCallback(filename=filename).pack()
         )
-
-    builder.adjust(2)
-    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
+    builder.adjust(1)
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="get_logs"))
 
     await callback.message.edit_text(
-        "📝 <b>Экспорт логов</b>\n\nВыберите нужный файл:",
+        "�️ <b>Архивные логи</b>\n\nВыберите дату:",
         reply_markup=builder.as_markup(),
         parse_mode="HTML"
     )

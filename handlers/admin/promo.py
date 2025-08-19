@@ -1,3 +1,11 @@
+PROMOCODES_PER_PAGE = 20
+
+from math import ceil
+from aiogram.filters.callback_data import CallbackData
+
+# Для пагинации
+class PromoPageCallback(CallbackData, prefix="promo_page"):
+    page: int
 """Управление промокодами в админ-панели: добавление, удаление, просмотр и массовое очищение."""
 
 import logging
@@ -111,6 +119,46 @@ async def process_add_promocode(message: types.Message, state: FSMContext) -> No
 
 
 # --- Новый способ: удаление промокода через кнопки ---
+@router.callback_query(F.data.startswith("remove_promocode_page"))
+async def remove_promocode_page(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Показывает страницу с промокодами для удаления (пагинация).
+    """
+    # Получаем номер страницы из callback_data
+    data = callback.data.split(":")
+    page = int(data[1]) if len(data) > 1 and data[1].isdigit() else 1
+    async with get_session() as session:
+        promocodes = await get_all_promocodes(session)
+    total = len(promocodes)
+    total_pages = max(1, ceil(total / PROMOCODES_PER_PAGE))
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * PROMOCODES_PER_PAGE
+    end = start + PROMOCODES_PER_PAGE
+    page_promocodes = promocodes[start:end]
+    builder = InlineKeyboardBuilder()
+    for p in page_promocodes:
+        builder.button(
+            text=f"🎟️ {p.code} — {p.duration_days} дн. (ост: {p.uses_left})",
+            callback_data=f"remove_promo:{p.code}"
+        )
+    # Кнопки навигации
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"remove_promocode_page:{page-1}"))
+    nav_buttons.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
+    if page < total_pages:
+        nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"remove_promocode_page:{page+1}"))
+    if nav_buttons:
+        builder.row(*nav_buttons)
+    builder.row(InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="promocode_menu_show"))
+    builder.adjust(1)
+    await callback.message.edit_text(
+        "<b>🗑️ Выберите промокод для удаления:</b>",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
 @router.callback_query(F.data == "remove_promocode")
 async def remove_promocode_start(callback: CallbackQuery, state: FSMContext) -> None:
     """
@@ -126,20 +174,8 @@ async def remove_promocode_start(callback: CallbackQuery, state: FSMContext) -> 
         )
         await callback.answer()
         return
-    builder = InlineKeyboardBuilder()
-    for p in promocodes:
-        builder.button(
-            text=f"🎟️ {p.code} — {p.duration_days} дн. (ост: {p.uses_left})",
-            callback_data=f"remove_promo:{p.code}"
-        )
-    builder.button(text="⬅️ Назад в меню", callback_data="promocode_menu_show")
-    builder.adjust(1)
-    await callback.message.edit_text(
-        "<b>🗑️ Выберите промокод для удаления:</b>",
-        parse_mode="HTML",
-        reply_markup=builder.as_markup()
-    )
-    await callback.answer()
+    # Переходим на первую страницу
+    await remove_promocode_page(callback, state)
 
 
 # --- Обработка нажатия на кнопку удаления конкретного промокода ---
@@ -150,11 +186,7 @@ async def remove_promocode_button(callback: CallbackQuery) -> None:
     """
     code = callback.data.removeprefix("remove_promo:")
     async with get_session() as session:
-        success = await remove_promocode(session, code)
-    if success:
-        text = f"✅ <b>Промокод <code>{code.upper()}</code> успешно удалён!</b>"
-    else:
-        text = f"❗️ <b>Промокод <code>{code.upper()}</code> не найден.</b>"
+        await remove_promocode(session, code)
     markup = callback.message.reply_markup
     if markup:
         new_buttons = [row for row in markup.inline_keyboard if not any(code in btn.callback_data for btn in row if btn.callback_data)]
@@ -165,7 +197,6 @@ async def remove_promocode_button(callback: CallbackQuery) -> None:
             )
         else:
             await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=new_buttons))
-    await callback.answer(text, show_alert=True)
 
 
 @router.message(PromoStates.remove)
@@ -192,28 +223,48 @@ async def process_remove_promocode(message: types.Message, state: FSMContext) ->
 
 # --- Просмотр всех промокодов ---
 
-@router.callback_query(F.data == "all_promocodes")
-async def show_all_promocodes(callback: CallbackQuery) -> None:
-    """
-    Показывает список всех активных промокодов с эмодзи и дружелюбным текстом.
-    """
+
+# Пагинация для просмотра всех промокодов
+@router.callback_query(F.data.startswith("all_promocodes_page"))
+async def show_all_promocodes_page(callback: CallbackQuery) -> None:
+    data = callback.data.split(":")
+    page = int(data[1]) if len(data) > 1 and data[1].isdigit() else 1
     async with get_session() as session:
         promocodes = await get_all_promocodes(session)
-
-        if promocodes:
-            text = "<b>🎟️ Активные промокоды:</b>\n\n" + "\n".join(
-                [
-                    f"🎟️ <code>{p.code}</code> — {p.duration_days} дн. (осталось: {p.uses_left})"
-                    for p in promocodes
-                ]
-            )
-        else:
-            text = "❌ <b>Нет активных промокодов.</b>\n\nДобавьте новый промокод, чтобы начать!"
-
+    total = len(promocodes)
+    PROMOCODES_PER_PAGE = 20
+    from math import ceil
+    total_pages = max(1, ceil(total / PROMOCODES_PER_PAGE))
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * PROMOCODES_PER_PAGE
+    end = start + PROMOCODES_PER_PAGE
+    page_promocodes = promocodes[start:end]
+    if page_promocodes:
+        text = "<b>🎟️ Активные промокоды:</b>\n\n" + "\n".join(
+            [
+                f"🎟️ <code>{p.code}</code> — {p.duration_days} дн. (осталось: {p.uses_left})"
+                for p in page_promocodes
+            ]
+        )
+    else:
+        text = "❌ <b>Нет активных промокодов.</b>\n\nДобавьте новый промокод, чтобы начать!"
     builder = InlineKeyboardBuilder()
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"all_promocodes_page:{page-1}"))
+    nav_buttons.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
+    if page < total_pages:
+        nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"all_promocodes_page:{page+1}"))
+    if nav_buttons:
+        builder.row(*nav_buttons)
     builder.row(InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="promocode_menu_show"))
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
+
+@router.callback_query(F.data == "all_promocodes")
+async def show_all_promocodes(callback: CallbackQuery) -> None:
+    # Переходим на первую страницу
+    await show_all_promocodes_page(callback)
 
 
 # --- Удаление ВСЕХ промокодов (с подтверждением) ---
