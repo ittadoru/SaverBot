@@ -25,6 +25,47 @@ from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
 logger = get_logger(__name__, platform="youtube")
 
 class YTDLPDownloader(BaseDownloader):
+
+    async def get_available_video_options(self, url: str, max_filesize_mb: int = 1024) -> dict:
+        """
+        Возвращает title, thumbnail_url и список форматов mp4 (240-1080p, не webm, не выше лимита по размеру).
+        Каждый формат: {'itag', 'res', 'progressive', 'filesize', 'mime_type'}
+        """
+        loop = asyncio.get_running_loop()
+        def fetch():
+            yt = YouTube(url)
+            title = yt.title
+            thumbnail_url = yt.thumbnail_url
+            formats = []
+            for s in yt.streams:
+                # Только mp4, только видео, только 240-1080p, не webm
+                if s.mime_type and s.mime_type.startswith('video/mp4') and s.resolution:
+                    try:
+                        res = int(s.resolution.replace('p',''))
+                    except Exception:
+                        continue
+                    if 240 <= res <= 1080:
+                        size_mb = s.filesize / 1024 / 1024 if s.filesize else 0
+                        if size_mb > max_filesize_mb:
+                            continue
+                        formats.append({
+                            'itag': s.itag,
+                            'res': s.resolution,
+                            'progressive': s.is_progressive,
+                            'filesize': s.filesize,
+                            'mime_type': s.mime_type,
+                            'size_mb': round(size_mb, 1)
+                        })
+            # Сортировка по разрешению (по возрастанию)
+            formats.sort(key=lambda x: int(x['res'].replace('p','')))
+            return {
+                'title': title,
+                'thumbnail_url': thumbnail_url,
+                'formats': formats
+            }
+        return await loop.run_in_executor(None, fetch)
+    
+    
     async def download(self, url: str, message, user_id: int | None = None) -> str | tuple[str, str]:
         """
         Скачивание лучшего mp4 (progressive, со звуком) через pytubefix.
@@ -37,7 +78,7 @@ class YTDLPDownloader(BaseDownloader):
         # logger.info(info)
 
         # return None
-        
+
         yt = YouTube(url)
         # Лог всех доступных потоков
         for stream in yt.streams:

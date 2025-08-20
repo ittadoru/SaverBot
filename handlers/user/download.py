@@ -1,13 +1,15 @@
 
 
-import asyncio
 import logging
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 import aiogram.utils.markdown as markdown
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 from utils.platform_detect import detect_platform
 from utils.video_utils import get_video_resolution
 from utils.send import send_video, send_audio
+from services.youtube import YTDLPDownloader
 from db.base import get_session
 from db.subscribers import is_subscriber
 from db.downloads import get_daily_downloads
@@ -15,7 +17,7 @@ from db.users import log_user_activity, add_or_update_user
 from db.channels import is_channel_guard_enabled, get_required_active_channels, check_user_memberships
 from db.platforms import increment_platform_download
 from handlers.user.referral import get_referral_stats
-from config import DAILY_DOWNLOAD_LIMITS
+from config import DAILY_DOWNLOAD_LIMITS, DOWNLOAD_FILE_LIMIT
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -67,16 +69,47 @@ async def download_handler(message: types.Message, state: FSMContext):
     # YouTube: если подписчик — две кнопки, иначе сразу скачиваем с ограничением
     if platform == 'youtube' and sub:
         try:
-            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text='Скачать видео', callback_data=f'ytdl:video:{url}')],
-                    [InlineKeyboardButton(text='Скачать аудио', callback_data=f'ytdl:audio:{url}')],
-                ]
+            downloader = YTDLPDownloader()
+
+            if level == 1:
+                max_filesize_mb = DOWNLOAD_FILE_LIMIT
+            elif level == 2:
+                max_filesize_mb = DOWNLOAD_FILE_LIMIT * 3
+            elif level >= 3 or sub:
+                max_filesize_mb = DOWNLOAD_FILE_LIMIT * 7
+
+            info = await downloader.get_available_video_options(url, max_filesize_mb=max_filesize_mb) 
+    
+            text = (
+                f"Название: \n"
+                f"{info['title']}\n\n"
+                f"Доступные разрешения:"
             )
-            await message.answer('Выберите формат для скачивания:', reply_markup=keyboard)
+            unique_res = {}
+            for fmt in info['formats']:
+                res = fmt['res']
+                # Если такого разрешения ещё нет, или если новый вариант progressive — заменяем
+                if res not in unique_res or (fmt['progressive'] and not unique_res[res]['progressive']):
+                    unique_res[res] = fmt
+            
+            buttons = [
+                [InlineKeyboardButton(
+                    text=res,
+                    callback_data=f"ytres:{fmt['itag']}"
+                )]
+                for res, fmt in unique_res.items()
+            ]
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+            await message.answer_photo(
+                photo=info['thumbnail_url'],
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
         except Exception:
-            await message.answer('Выберите формат: видео или аудио (ошибка клавиатуры)')
+            await message.answer('Ошибка при формировании кнопок')
+
         await state.update_data({BUSY_KEY: False})
         return
 
