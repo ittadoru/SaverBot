@@ -1,4 +1,3 @@
-
 """YouTube downloader с поддержкой проверки размера и агрегированного прогресса.
 
 Исправление: ранее процент "застревал" (например, на ~33%), потому что учитывался
@@ -34,6 +33,11 @@ class YTDLPDownloader(BaseDownloader):
         logger.info("⏬ [DOWNLOAD] start url=%s", url)
         loop = asyncio.get_running_loop()
 
+        # info = await self.get_video_info(url)
+        # logger.info(info)
+
+        # return None
+        
         yt = YouTube(url)
         # Лог всех доступных потоков
         for stream in yt.streams:
@@ -82,53 +86,66 @@ class YTDLPDownloader(BaseDownloader):
         return filename
 
     async def download_audio(self, url: str, user_id: int, message: types.Message | None = None) -> str:
-        filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp3")
+        """
+        Скачивает лучший аудиопоток (m4a/mp4) через pytubefix, без конвертации в mp3.
+        Возвращает путь к скачанному m4a-файлу.
+        """
+        filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.m4a")
         logger.info("⏬ [AUDIO] start url=%s user_id=%s", url, user_id)
         loop = asyncio.get_running_loop()
-        ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': filename,
-            'merge_output_format': 'mp3',
-            'quiet': False,
-            'logger': YTDlpLoggerAdapter(),
-            'retries': 10,
-            'fragment_retries': 10,
-            'socket_timeout': 30,
-            'http_chunk_size': 1024 * 1024,
-        }
-
-        def run_download_with_retries():
-            max_attempts = 3
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([url])
-                    return
-                except yt_dlp.utils.DownloadError as e:  # noqa: PERF203
-                    logger.error("audio dl error attempt=%s/%s err=%s", attempt, max_attempts, e)
-                except Exception:  # noqa: BLE001
-                    logger.exception("audio unexpected error attempt=%s/%s", attempt, max_attempts)
-                if attempt < max_attempts:
-                    time.sleep(5)
-                else:
-                    raise Exception("all attempts failed")
-
+        def run_download():
+            yt = YouTube(url)
+            # Выбираем лучший аудиопоток в mp4/m4a
+            stream = yt.streams.filter(only_audio=True, file_extension='mp4').order_by('abr').desc().first()
+            if not stream:
+                raise Exception("No audio/mp4 stream found")
+            stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(filename))
         try:
-            await loop.run_in_executor(None, run_download_with_retries)
-        except Exception as e:  # noqa: BLE001
+            await loop.run_in_executor(None, run_download)
+        except Exception as e:
             import traceback
             err = str(e)
             logger.error("audio failed err=%s", err)
             logger.error(traceback.format_exc())
             if message:
-                try:
-                    await message.bot.send_message(
-                        PRIMARY_ADMIN_ID,
-                        f"❗️Ошибка аудио:\n<pre>{err}</pre>",
-                        parse_mode="HTML",
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
+                await message.bot.send_message(
+                    PRIMARY_ADMIN_ID,
+                    f"❗️Ошибка аудио:\n<pre>{err}</pre>",
+                    parse_mode="HTML",
+                )
             raise
+
         logger.info("✅ [AUDIO] done file=%s", filename)
         return filename
+    
+    async def get_video_info(self, url: str) -> dict:
+        """
+        Получить всю информацию о ролике: название, форматы, размеры, наличие аудио/видео, и т.д.
+        Возвращает dict с ключами: title, streams (list), length, author, etc.
+        """
+        loop = asyncio.get_running_loop()
+        def fetch():
+            yt = YouTube(url)
+            info = {
+                'title': yt.title,
+                'author': yt.author,
+                'length': yt.length,
+                'views': yt.views,
+                'description': yt.description,
+                'streams': []
+            }
+            for s in yt.streams:
+                info['streams'].append({
+                    'itag': s.itag,
+                    'type': s.type,
+                    'res': s.resolution,
+                    'mime_type': s.mime_type,
+                    'progressive': s.is_progressive,
+                    'abr': getattr(s, 'abr', None),
+                    'filesize': s.filesize,
+                    'video_codec': getattr(s, 'video_codec', None),
+                    'audio_codec': getattr(s, 'audio_codec', None),
+                    'url': s.url
+                })
+            return info
+        return await loop.run_in_executor(None, fetch)
