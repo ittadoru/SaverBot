@@ -12,3 +12,5 @@ colorlog==6.9.0
 watchfiles==1.1.0
 yt-dlp==2024.10.22
 moviepy==2.2.1
+aiofiles==24.1.0
+pytubefix==9.4.1

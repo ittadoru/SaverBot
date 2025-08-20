@@ -67,7 +67,16 @@ class YTDlpLoggerAdapter:
         return
     
     def warning(self, msg):
-        return
+        # Фильтруем шумные предупреждения yt-dlp
+        msg_str = str(msg)
+        if (
+            'nsig extraction failed' in msg_str
+            or 'Falling back to generic n function search' in msg_str
+            or 'player =' in msg_str
+            or 'n =' in msg_str
+        ):
+            return
+        self._logger.warning("[YTDLP] %s", msg)
 
     def error(self, msg):
         self._logger.error("[YTDLP] %s", msg)

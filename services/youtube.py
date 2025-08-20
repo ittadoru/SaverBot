@@ -12,8 +12,9 @@ import os
 import uuid
 import time
 import asyncio
-import yt_dlp
+from pytubefix import YouTube
 from aiogram import types
+import yt_dlp
 
 from utils.logger import get_logger, YTDlpLoggerAdapter
 from db.subscribers import is_subscriber as db_is_subscriber
@@ -25,93 +26,56 @@ from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
 logger = get_logger(__name__, platform="youtube")
 
 class YTDLPDownloader(BaseDownloader):
-    async def download(
-        self,
-        url: str,
-        user_id: int,
-        message: types.Message,
-        custom_format: str | None = None,
-    ) -> str | tuple[str, str]:
-        """Скачать видео. Возврат: путь или ("DENIED_SIZE", size_mb)."""
+    async def download(self, url: str, message, user_id: int | None = None) -> str | tuple[str, str]:
+        """
+        Скачивание лучшего mp4 (progressive, со звуком) через pytubefix.
+        """
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
-        logger.info("⏬ [DOWNLOAD] start url=%s user_id=%s", url, user_id)
+        logger.info("⏬ [DOWNLOAD] start url=%s", url)
         loop = asyncio.get_running_loop()
 
-        def extract_info():
-            with yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True}) as ydl:
-                return ydl.extract_info(url, download=False)
+        yt = YouTube(url)
+        # Лог всех доступных потоков
+        for stream in yt.streams:
+            logger.info(f"id={stream.itag} | type={stream.type} | res={stream.resolution} | ext={stream.mime_type} | progressive={stream.is_progressive} | filesize={stream.filesize}")
 
-        info = await loop.run_in_executor(None, extract_info)
-        file_size_bytes = None
-        if info:
-            file_size_bytes = info.get('filesize') or info.get('filesize_approx')
+        # Лучший mp4 progressive (со звуком)
+        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+        if not stream:
+            raise Exception("No mp4 progressive stream found")
 
-        async with get_session() as session:
-            is_sub = await db_is_subscriber(session, user_id)
+        filesize_bytes = stream.filesize
+        filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
+        logger.info(f"[SIZE] video size: {filesize_mb:.2f} MB (bytes={filesize_bytes})")
 
-        large_video = False
-        if file_size_bytes:
-            size_mb = file_size_bytes / (1024 * 1024)
-            if not is_sub and size_mb > MAX_FREE_VIDEO_MB:
-                return ("DENIED_SIZE", f"{size_mb:.1f}")
-            if is_sub and size_mb > MAX_FREE_VIDEO_MB:
-                logger.info("large video for subscriber size=%.1fMB", size_mb)
-                large_video = True
+        is_sub = False
+        if user_id is not None and isinstance(user_id, int):
+            async with get_session() as session:
+                is_sub = await db_is_subscriber(session, user_id)
+        logger.info(f"[SUB_CHECK] user_id={user_id} is_sub={is_sub} (expire_at должен быть > now)")
+        if not is_sub and filesize_mb > MAX_FREE_VIDEO_MB:
+            logger.info(f"DENIED_SIZE: {filesize_mb:.2f} MB > {MAX_FREE_VIDEO_MB} MB (not subscriber)")
+            return ("DENIED_SIZE", f"{filesize_mb:.1f}")
 
-        video_format = custom_format or (
-            'bestvideo[ext=mp4][vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]'
-            if is_sub else
-            'bestvideo[ext=mp4][vcodec^=avc1][height<=480]+bestaudio[ext=m4a]/best[ext=mp4]'
-        )
-
-        # убрали пользовательский прогресс и callback'и – скрытая загрузка
-        job_id = None
-
-        def progress_hook(_d):  # noqa: D401
-            return  # игнорируем
-
-        ydl_opts = {
-            'format': video_format,
-            'outtmpl': filename,
-            'merge_output_format': 'mp4',
-            'quiet': False,
-            'logger': YTDlpLoggerAdapter(),
-            'retries': 10,
-            'fragment_retries': 10,
-            'socket_timeout': 30,
-            'http_chunk_size': 1024 * 1024,
-            'progress_hooks': [progress_hook],
-        }
-
-        def run_download_with_retries():
-            max_attempts = 3
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([url])
-                    return
-                except Exception:  # noqa: BLE001
-                    logger.exception("yt download error attempt=%s", attempt)
-                if attempt < max_attempts:
-                    time.sleep(5)
-                else:
-                    raise Exception("all attempts failed")
+        def run_download():
+            stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(filename))
 
         try:
-            await loop.run_in_executor(None, run_download_with_retries)
-        except Exception as e:  # noqa: BLE001
+            await loop.run_in_executor(None, run_download)
+        except Exception as e:
             import traceback
             err = str(e)
             logger.error("download failed err=%s", err)
             logger.error(traceback.format_exc())
-            try:
-                await message.bot.send_message(
-                    PRIMARY_ADMIN_ID,
-                    f"❗️Ошибка YouTube:\n<pre>{err}</pre>",
-                    parse_mode="HTML",
-                )
-            except Exception:  # noqa: BLE001
-                pass
+            if message:
+                try:
+                    await message.bot.send_message(
+                        PRIMARY_ADMIN_ID,
+                        f"❗️Ошибка YouTube:\n<pre>{err}</pre>",
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
             raise
 
         logger.info("✅ [DOWNLOAD] done file=%s", filename)

@@ -73,7 +73,7 @@ async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[
             username = f" (@{user.username})" if user.username else ""
             text += f"{status_icon} <code>{user.id}</code> — {user.first_name}{username}\n"
 
-    nav = pagination_keyboard(page, total_pages, prefix="users_page", extra_buttons=[("⬅️ Назад к управлению", "manage_users")])
+    nav = pagination_keyboard(page, total_pages, prefix="users_page", extra_buttons=[("⬅️ Назад", "manage_users")])
     return text, nav
 
 
@@ -85,7 +85,7 @@ async def list_users_handler(callback: types.CallbackQuery) -> None:
     async with get_session() as session:
         text, builder = await _get_users_page_markup(session, page=1)
         await callback.message.edit_text(
-            text, parse_mode="HTML", reply_markup=builder.as_markup()
+            text, parse_mode="HTML", reply_markup=builder
         )
     logger.info("Администратор %d запросил список пользователей.", callback.from_user.id)
     await callback.answer()

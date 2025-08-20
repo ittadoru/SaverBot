@@ -7,14 +7,16 @@ from contextlib import suppress
 from typing import Awaitable, Callable
 from handlers.user.referral import get_referral_stats
 from db.base import get_session
-from utils.keyboards import pagination_keyboard
+from utils.keyboards import back_button
+from config import BROADCAST_PROGRESS_UPDATE_INTERVAL, BROADCAST_PER_MESSAGE_DELAY
 
 from aiogram import F, Bot, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
-from config import BROADCAST_PROGRESS_UPDATE_INTERVAL, BROADCAST_PER_MESSAGE_DELAY
+import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +39,9 @@ def _keyboard(prefix: str, send_button_label: str) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-async def _edit_constructor(message: Message, state: FSMContext, title: str, prefix: str, send_button_label: str) -> None:
+async def _edit_constructor(message: Message, state: FSMContext, title: str, prefix: str, send_button_label: str, bot: Bot) -> None:
     with suppress(TelegramAPIError):
-        await message.edit_text(title, reply_markup=_keyboard(prefix, send_button_label), parse_mode="Markdown")
+        await bot(message.edit_text(title, reply_markup=_keyboard(prefix, send_button_label), parse_mode="Markdown"))
 
 def _render_progress_bar(sent, total, bar_length=10):
     percent = sent / total if total else 0
@@ -58,7 +60,6 @@ def register_broadcast_constructor(
     summary_title: str,
     total_label: str,
     audience_fetcher: AudienceFetcher,
-    per_message_delay: float = BROADCAST_PER_MESSAGE_DELAY,
 ) -> None:
     """Регистрирует полный набор хендлеров конструктора + отправки.
 
@@ -66,10 +67,10 @@ def register_broadcast_constructor(
     """
 
     @router.callback_query(F.data == start_trigger)
-    async def _start(callback: CallbackQuery, state: FSMContext) -> None:
+    async def _start(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
         await state.clear()
         await state.update_data(constructor_message_id=callback.message.message_id)
-        await _edit_constructor(callback.message, state, title, prefix, send_button_label)
+        await _edit_constructor(callback.message, state, title, prefix, send_button_label, bot)
         await callback.answer()
 
     @router.callback_query(F.data == f"{prefix}:cancel")
@@ -168,7 +169,7 @@ def register_broadcast_constructor(
             await callback.answer("❗️ Пустое сообщение.", show_alert=True)
             return
 
-        await callback.message.edit_text(start_status_text, reply_markup=pagination_keyboard())
+        await callback.message.edit_text(start_status_text, reply_markup=back_button())
         asyncio.create_task(_send_task(bot, callback.from_user.id, data))
         await state.clear()
         await callback.answer()
@@ -219,19 +220,29 @@ def register_broadcast_constructor(
             now = asyncio.get_event_loop().time()
             if (sent % 100 == 0 or sent == total) or (now - last_update > BROADCAST_PROGRESS_UPDATE_INTERVAL):
                 with suppress(TelegramAPIError):
-                    await bot.edit_message_text(_render_progress_bar(sent, total), admin_id, progress_msg.message_id)
+                    await bot.edit_message_text(
+                        text=_render_progress_bar(sent, total),
+                        chat_id=admin_id,
+                        message_id=progress_msg.message_id
+                    )
                 last_update = now
             await asyncio.sleep(BROADCAST_PER_MESSAGE_DELAY)
         logger.info("Рассылка '%s' завершена. Отправлено=%s Ошибок=%s", prefix, sent, failed)
+        percent = int(sent / total * 100) if total else 0
         summary_text = (
             f"{summary_title}\n\n"
             f"👥 {total_label}: {total}\n"
-            f"👍 Успешно отправлено: {sent}\n"
+            f"👍 Успешно отправлено: {sent} ({percent}%)\n"
             f"👎 Не удалось доставить: {failed}"
         )
-        with suppress(TelegramAPIError):
-            await bot.edit_message_text(_render_progress_bar(sent, total), admin_id, progress_msg.message_id)
-            await bot.send_message(admin_id, summary_text, parse_mode="Markdown")
+        from aiogram.exceptions import TelegramBadRequest
+        with suppress(TelegramBadRequest):
+            await bot.edit_message_text(
+                text=_render_progress_bar(sent, total),
+                chat_id=admin_id,
+                message_id=progress_msg.message_id
+            )
+        await bot.send_message(admin_id, summary_text, parse_mode="Markdown")
 
     async def _is_vip(session, uid):
         try:
@@ -258,5 +269,11 @@ async def _cleanup(message: Message, state: FSMContext, bot: Bot, title=None, pr
             await bot.delete_message(message.chat.id, prompt_msg_id)
         await message.delete()
     if title and prefix and send_button_label and constructor_msg_id:
-        constructor_message = Message(message_id=constructor_msg_id, chat=message.chat, bot=bot)
-        await _edit_constructor(constructor_message, state, title, prefix, send_button_label)
+        with suppress(TelegramAPIError):
+            await bot.edit_message_text(
+                text=title,
+                chat_id=message.chat.id,
+                message_id=constructor_msg_id,
+                reply_markup=_keyboard(prefix, send_button_label),
+                parse_mode="Markdown"
+            )

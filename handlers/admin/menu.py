@@ -77,6 +77,6 @@ async def back_to_admin_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "clear_downloads")
 async def clear_downloads_handler(callback: CallbackQuery):
-    deleted = delete_all_files_in_downloads()
+    deleted = await delete_all_files_in_downloads()
     await callback.answer()
     await callback.message.answer(f"🗑️ Удалено файлов из downloads: <b>{deleted}</b>", parse_mode="HTML")

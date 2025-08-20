@@ -12,6 +12,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from aiogram import Bot
 import os
+import aiofiles
+import asyncio
 
 from db.base import get_session  # (13) убрали динамический импорт
 from db.subscribers import (
@@ -30,8 +32,10 @@ app = FastAPI()
 
 def render_not_found_page():
     try:
-        with open("templates/page_not_found.html", encoding="utf-8") as f:
-            html = f.read()
+        async def read_html():
+            async with aiofiles.open("templates/page_not_found.html", encoding="utf-8") as f:
+                return await f.read()
+        html = asyncio.run(read_html())
     except Exception:
         html = "<h1>404 Not Found</h1><p>Видео не найдено.</p>"
     return HTMLResponse(content=html, status_code=404)
@@ -41,7 +45,7 @@ def render_not_found_page():
 async def serve_video(name: str):
     """Отдаёт mp4-файл из папки downloads по адресу /video/{name}.mp4"""
     file_path = os.path.join("downloads", f"{name}.mp4")
-    if not os.path.isfile(file_path):
+    if not await asyncio.to_thread(os.path.isfile, file_path):
         return render_not_found_page()
     return FileResponse(file_path, media_type="video/mp4", filename=f"{name}.mp4")
 

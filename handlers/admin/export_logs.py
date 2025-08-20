@@ -2,6 +2,8 @@
 
 import logging
 import os
+import aiofiles.os
+import asyncio
 import re
 from aiogram import F, Router
 from aiogram.filters.callback_data import CallbackData
@@ -19,18 +21,18 @@ class LogCallback(CallbackData, prefix="log_select"):
 router = Router()
 
 
-def get_current_log():
+async def get_current_log():
     """Возвращает имя текущего лога, если есть."""
-    if not os.path.exists(LOG_DIR):
+    if not await asyncio.to_thread(os.path.exists, LOG_DIR):
         return None
-    files = os.listdir(LOG_DIR)
+    files = await asyncio.to_thread(os.listdir, LOG_DIR)
     return "bot.log" if "bot.log" in files else None
 
-def get_archived_logs():
+async def get_archived_logs():
     """Возвращает отсортированный список архивных логов формата bot_YYYY-MM-DD.log."""
-    if not os.path.exists(LOG_DIR):
+    if not await asyncio.to_thread(os.path.exists, LOG_DIR):
         return []
-    files = os.listdir(LOG_DIR)
+    files = await asyncio.to_thread(os.listdir, LOG_DIR)
     log_pattern = re.compile(r"^bot_(\d{4})-(\d{2})-(\d{2})\.log$")
     archived_logs = sorted(
         [f for f in files if log_pattern.match(f)],
@@ -45,7 +47,7 @@ def get_archived_logs():
 async def show_log_main_menu(callback: CallbackQuery):
     """Показывает главное меню экспорта логов: текущий лог и архивные логи."""
     builder = InlineKeyboardBuilder()
-    current_log = get_current_log()
+    current_log = await get_current_log()
     if current_log:
         builder.button(
             text="📄 Текущий лог",
@@ -65,7 +67,7 @@ async def show_log_main_menu(callback: CallbackQuery):
 @router.callback_query(F.data == "show_archived_logs")
 async def show_archived_logs_menu(callback: CallbackQuery):
     """Показывает меню с архивными логами (только даты)."""
-    archived_logs = get_archived_logs()
+    archived_logs = await get_archived_logs()
     builder = InlineKeyboardBuilder()
     if not archived_logs:
         await callback.answer("Архивных логов нет.", show_alert=True)
@@ -101,12 +103,12 @@ async def send_log_file(callback: CallbackQuery, callback_data: LogCallback):
     log_path = os.path.join(LOG_DIR, filename)
     user_id = callback.from_user.id
 
-    if not os.path.exists(log_path):
+    if not await asyncio.to_thread(os.path.exists, log_path):
         logging.warning(f"Админ {user_id} запросил несуществующий лог: {filename}")
         await callback.answer(f"❗️ Файл <b>{filename}</b> не найден.", show_alert=True, parse_mode="HTML")
         return
 
-    if os.path.getsize(log_path) == 0:
+    if await asyncio.to_thread(os.path.getsize, log_path) == 0:
         logging.info(f"Админ {user_id} запросил пустой лог: {filename}")
         await callback.answer(f"⚠️ Файл <b>{filename}</b> пуст.", show_alert=True, parse_mode="HTML")
         return

@@ -27,11 +27,11 @@ async def send_video(
     Бизнес‑лимит (MAX_FREE_VIDEO_MB) теперь проверяется ДО скачивания в загрузчиках, чтобы не тратить ресурсы зря.
     """
  
-    file_size = os.path.getsize(file_path)
-    TELEGRAM_LIMIT_MB = 49
+    file_size = await asyncio.to_thread(os.path.getsize, file_path)
+    TELEGRAM_LIMIT_MB = 45
     try:
         if file_size > TELEGRAM_LIMIT_MB * 1024 * 1024:
-            file_name = os.path.basename(file_path)
+            file_name = await asyncio.to_thread(os.path.basename, file_path)
             link = f"{DOMAIN}/video/{file_name}"
             keyboard = types.InlineKeyboardMarkup(
                 inline_keyboard=[
@@ -44,7 +44,7 @@ async def send_video(
             await bot.send_message(
                 chat_id,
                 text=(
-                    f"📥 Файл больше технического лимита Telegram для бота (~{TELEGRAM_LIMIT_MB} МБ). Используйте ссылку ниже для скачивания.\n\n"
+                    f"📥 Файл больше технического лимита Telegram для бота. Используйте ссылку ниже для скачивания.\n\n"
                     + ("⭐ У вас активна подписка — ссылка будет жить дольше." if sub else "⏳ Ссылка истечёт через 5 минут (у подписчиков — дольше).")
                 ),
                 reply_markup=keyboard
@@ -58,7 +58,7 @@ async def send_video(
             await bot.send_video(
                 chat_id=chat_id,
                 video=FSInputFile(file_path),
-                caption = f"💾 Скачивай видео с YouTube | Instagram | Tiktok \n\n@{me.username}",      
+                caption = f"💾 Скачивай видео с Tiktok | Instagram | YouTube \n\n@{me.username}",      
                 width=width,
                 height=height,
                 supports_streaming=True,
@@ -68,8 +68,10 @@ async def send_video(
         logger.info("[SEND] Отправка завершена ✅")
     except Exception as e:
         logger.error(f"[SEND] Ошибка при отправке видео: {e}")
+        # Удаляем файл при ошибке
         try:
             await bot.send_message(chat_id, "❗️ Ошибка при отправке видео. Попробуйте позже.")
+            await asyncio.to_thread(os.remove, file_path)
         except Exception:
             pass
 
@@ -86,7 +88,7 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
         await bot.send_audio(
             chat_id=chat_id,
             audio=FSInputFile(file_path),
-            caption = f"💾 Скачивай аудио с YouTube | Instagram | Tiktok \n\n@{me.username}"
+            caption = f"💾 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}"
         )
         # Удаляем файл спустя 10 секунд после отправки
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))

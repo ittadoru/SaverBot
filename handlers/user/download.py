@@ -1,297 +1,147 @@
 
+
+import asyncio
+import logging
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 import aiogram.utils.markdown as markdown
-import asyncio
-from typing import Optional
-
 from utils.platform_detect import detect_platform
 from utils.video_utils import get_video_resolution
 from utils.send import send_video, send_audio
-from services import get_downloader
-from services.youtube import YTDLPDownloader
-from utils import logger as log
 from db.base import get_session
 from db.subscribers import is_subscriber
-from handlers.user.referral import get_referral_stats
+from db.downloads import get_daily_downloads
 from db.users import log_user_activity, add_or_update_user
 from db.channels import is_channel_guard_enabled, get_required_active_channels, check_user_memberships
-from db.downloads import get_daily_downloads, increment_daily_download, increment_download, add_download_link
 from db.platforms import increment_platform_download
-from config import PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB, DAILY_DOWNLOAD_LIMITS, FORMAT_SELECTION_TIMEOUT
+from handlers.user.referral import get_referral_stats
+from config import DAILY_DOWNLOAD_LIMITS
 
-
+logger = logging.getLogger(__name__)
 router = Router()
-
-# FSMContext-based busy/timeout management
 BUSY_KEY = "busy"
-PENDING_TASKS_KEY = "pending_format_tasks"
-SUBSCRIBER_SELECTING_KEY = "subscriber_selecting"
 
 
-
-# Фиксированная клавиатура форматов YouTube
-def get_format_keyboard() -> InlineKeyboardBuilder:
-    kb = InlineKeyboardBuilder()
-    kb.row(
-        InlineKeyboardButton(text='Видео 240p', callback_data='yt_download:video_240'),
-        InlineKeyboardButton(text='Видео 360p', callback_data='yt_download:video_360')
-    )
-    kb.row(
-        InlineKeyboardButton(text='Видео 480p', callback_data='yt_download:video_480'),
-        InlineKeyboardButton(text='Видео 720p', callback_data='yt_download:video_720')
-    )
-    kb.row(InlineKeyboardButton(text='Скачать аудио', callback_data='yt_download:audio'))
-    return kb
-
-async def is_user_busy(state: FSMContext) -> bool:
-    data = await state.get_data()
-    return data.get(BUSY_KEY, False)
-
-async def set_user_busy(state: FSMContext, value: bool = True) -> None:
-    await state.update_data({BUSY_KEY: value})
-
-async def clear_user_busy(state: FSMContext) -> None:
-    await state.update_data({BUSY_KEY: False})
-
-async def set_pending_task(state: FSMContext, task: asyncio.Task) -> None:
-    await state.update_data({PENDING_TASKS_KEY: task})
-
-async def get_pending_task(state: FSMContext) -> Optional[asyncio.Task]:
-    data = await state.get_data()
-    return data.get(PENDING_TASKS_KEY)
-
-async def clear_pending_task(state: FSMContext) -> None:
-    await state.update_data({PENDING_TASKS_KEY: None})
-
-async def set_subscriber_selecting(state: FSMContext, value: bool = True) -> None:
-    await state.update_data({SUBSCRIBER_SELECTING_KEY: value})
-
-async def is_subscriber_selecting(state: FSMContext) -> bool:
-    data = await state.get_data()
-    return data.get(SUBSCRIBER_SELECTING_KEY, False)
-
-async def clear_subscriber_selecting(state: FSMContext) -> None:
-    await state.update_data({SUBSCRIBER_SELECTING_KEY: False})
-
-def _schedule_format_timeout(user_id: int, bot, chat_id: int, state: FSMContext):
-    async def waiter():
-        try:
-            await asyncio.sleep(FORMAT_SELECTION_TIMEOUT)
-            if await is_user_busy(state):
-                await clear_user_busy(state)
-                try:
-                    await bot.send_message(chat_id, '⌛️ Выбор формата отменён (таймаут). Отправьте ссылку снова.')
-                except Exception:
-                    pass
-        except asyncio.CancelledError:
-            return
-        finally:
-            await clear_pending_task(state)
-    task = asyncio.create_task(waiter())
-    asyncio.create_task(set_pending_task(state, task))
-
+# --- Основной обработчик ---
 @router.message(F.text.regexp(r'https?://'))
 async def download_handler(message: types.Message, state: FSMContext):
-
     url = message.text.strip()
     user = message.from_user
     platform = detect_platform(url)
 
-    # --- Глобальное ограничение и подписка на каналы ---
-    async with get_session() as session:
-        _, _, is_vip = await get_referral_stats(session, user.id)
-        if not is_vip:
-            guard_on = await is_channel_guard_enabled(session)
-            if guard_on:
-                required_channels = await get_required_active_channels(session)
-                if required_channels:
-                    bot = message.bot
-                    check_results = await check_user_memberships(bot, user.id, required_channels)
-                    not_joined = [ch for ch, res in zip(required_channels, check_results) if not res.is_member]
-                    if not_joined:
-                        text = "<b>Для скачивания необходимо подписаться на каналы:</b>\n\n"
-                        for ch in not_joined:
-                            link = markdown.hlink(f"@{ch.username}", f"https://t.me/{ch.username}")
-                            text += f"{link}\n"
-                        text += "\nПосле подписки — отправьте ссылку ещё раз."
-                        await message.answer(text, parse_mode="HTML")
-                        return
-
-    # корректная проверка подписки (нужна сессия)
-    if platform == 'youtube':
-        async with get_session() as session:
-            is_yt_sub = await is_subscriber(session, user.id)
-    else:
-        is_yt_sub = False
-
-
-    if await is_user_busy(state):
-        # Если пользователь был в режиме выбора формата — сбрасываем busy и таймер, разрешаем новую ссылку
-        task = await get_pending_task(state)
-        if task and not task.done():
-            task.cancel()
-        await clear_pending_task(state)
-        await clear_user_busy(state)
-        await clear_subscriber_selecting(state)
-        # Можно добавить уведомление, если нужно: await message.answer('Предыдущий выбор формата отменён.')
-
-    if is_yt_sub:
-        await set_user_busy(state, True)
-        await state.update_data({f'yt_url_{user.id}': url})
-        await set_subscriber_selecting(state, True)
-        kb = get_format_keyboard()
-        await message.answer('Выберите формат скачивания (3 мин)...', reply_markup=kb.as_markup())
-        _schedule_format_timeout(user.id, message.bot, message.chat.id, state)
+    # Проверка на занятость
+    data = await state.get_data()
+    if data.get(BUSY_KEY, False):
+        await message.answer('⏳ Уже выполняется другая загрузка. Пожалуйста, дождитесь завершения.')
         return
+    await state.update_data({BUSY_KEY: True})
 
-    await set_user_busy(state, True)
-    if await check_download_limit(message, user.id):
-        await clear_user_busy(state)
-        return
-    await message.answer('⏳ Скачиваем...')
-    await process_download(message, url, user.id, platform, state)
-
-async def check_download_limit(message: types.Message, user_id: int) -> bool:
+    # Проверка лимита и уровня
     async with get_session() as session:
-        daily = await get_daily_downloads(session, user_id)
-        sub = await is_subscriber(session, user_id)
-        _, level, _ = await get_referral_stats(session, user_id)
+        daily = await get_daily_downloads(session, user.id)
+        sub = await is_subscriber(session, user.id)
+        _, level, is_vip = await get_referral_stats(session, user.id)
+        guard_on = await is_channel_guard_enabled(session)
+        required_channels = await get_required_active_channels(session) if guard_on and not is_vip else []
     limit = DAILY_DOWNLOAD_LIMITS.get(level)
-    if sub or limit is None:
-        return False
-    if daily >= limit:
-        await message.answer(f'⚠️ Лимит {limit} скачиваний в день. Оформите подписку для безлимита или повысьте реферальный уровень.')
-        return True
-    return False
+    if not sub and limit is not None and daily >= limit:
+        await message.answer(f'⚠️ Лимит {limit} скачиваний в день. Оформите подписку для безлимита.')
+        await state.update_data({BUSY_KEY: False})
+        return
 
-def _normalize_download_result(result):
-    """Приводит результат download() к строке пути либо возвращает спец-кортеж DENIED_SIZE.
-
-    Возможные варианты:
-      * 'path/to/file.mp4' – обычный случай.
-      * ('DENIED_SIZE', size_mb_str) – отказ.
-      * ('path/to/file.mp4', job_id) – большой файл с прогрессом.
-    Возвращаем либо ('DENIED_SIZE', size), либо строковый путь.
-    """
-    if isinstance(result, tuple):
-        if result and result[0] == 'DENIED_SIZE':
-            return result  # оставляем как есть
-        # предполагаем (path, job_id)
-        if len(result) == 2 and isinstance(result[0], str):
-            return result[0]
-    return result
-
-
-async def process_download(message: types.Message, url: str, user_id: int, platform: str, state: FSMContext):
-    try:
-        downloader = get_downloader(url)
-        async with get_session() as session:
-            # гарантируем наличие пользователя
-            await add_or_update_user(session, user_id, message.from_user.first_name, message.from_user.username)
-            if platform == 'youtube':
-                raw_result = await downloader.download(url, user_id, message)
-                normalized = _normalize_download_result(raw_result)
-                if isinstance(normalized, tuple) and normalized and normalized[0] == 'DENIED_SIZE':
-                    size_mb = normalized[1]
-                    builder = InlineKeyboardBuilder()
-                    builder.button(text='💳 Подписка', callback_data='subscribe:open')
-                    await message.answer(
-                        f'🚫 Видео больше лимита {MAX_FREE_VIDEO_MB} МБ (это {size_mb} МБ) и недоступно бесплатно. Оформите подписку.',
-                        reply_markup=builder.as_markup()
-                    )
-                    return
-                file_path = normalized
-            else:
-                file_path = await downloader.download(url, user_id)
-        if file_path is None:
-            await message.answer('🚫 Видео недоступно (возрастное ограничение или требуется авторизация).')
+    # Проверка подписки на каналы (если нужно)
+    if required_channels:
+        bot = message.bot
+        check_results = await check_user_memberships(bot, user.id, required_channels)
+        not_joined = [ch for ch, res in zip(required_channels, check_results) if not res.is_member]
+        if not_joined:
+            text = "<b>Для скачивания необходимо подписаться на каналы:</b>\n\n"
+            for ch in not_joined:
+                link = markdown.hlink(f"@{ch.username}", f"https://t.me/{ch.username}")
+                text += f"{link}\n"
+            text += "\nПосле подписки — отправьте ссылку ещё раз."
+            await message.answer(text, parse_mode="HTML")
+            await state.update_data({BUSY_KEY: False})
             return
-        w, h = get_video_resolution(file_path)
-        asyncio.create_task(send_video(message.bot, message, message.chat.id, user_id, file_path, w, h))
-        async with get_session() as session:
-            await log_user_activity(session, user_id)
-            await increment_download(session, user_id)
-            await increment_platform_download(session, user_id, platform)
-            await increment_daily_download(session, user_id)  # теперь всегда для всех
-            await add_download_link(session, user_id, url)
-    except Exception as e:  # noqa: BLE001
-        log.log_error(f'Ошибка при скачивании: {e}')
-        await message.answer('❗️ Ошибка при скачивании, попробуйте позже.')
+
+    # YouTube: если подписчик — две кнопки, иначе сразу скачиваем с ограничением
+    if platform == 'youtube' and sub:
         try:
-            await message.bot.send_message(PRIMARY_ADMIN_ID, f'Ошибка при скачивании: {e}')
-        except Exception:  # noqa: BLE001
-            pass
-    finally:
-        await clear_user_busy(state)
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text='Скачать видео', callback_data=f'ytdl:video:{url}')],
+                    [InlineKeyboardButton(text='Скачать аудио', callback_data=f'ytdl:audio:{url}')],
+                ]
+            )
+            await message.answer('Выберите формат для скачивания:', reply_markup=keyboard)
+        except Exception:
+            await message.answer('Выберите формат: видео или аудио (ошибка клавиатуры)')
+        await state.update_data({BUSY_KEY: False})
+        return
+
+    # Для всех остальных случаев — сразу скачиваем видео
+    await message.answer('⏳ Скачиваем...')
+    await process_youtube_or_other(message, url, user.id, platform, state, 'video', level, sub)
 
 
-
-@router.callback_query(lambda c: c.data.startswith('yt_download:'))
-async def yt_download_callback(callback: types.CallbackQuery, state: FSMContext):
-    """
-    Обрабатывает выбор формата пользователем. Формат определяется по id из callback_data.
-    """
-    fmt_id = callback.data.split(':')[1]
+# --- Callback для YouTube кнопок ---
+@router.callback_query(lambda c: c.data.startswith('ytdl:'))
+async def ytdl_callback_handler(callback: types.CallbackQuery, state: FSMContext):
+    _, mode, url = callback.data.split(':', 2)
     user = callback.from_user
-    url = (await state.get_data()).get(f'yt_url_{user.id}')
-    if not url:
-        return await callback.answer('Ссылка не найдена.')
-    if await is_user_busy(state):
-        if await is_subscriber_selecting(state):
-            await clear_subscriber_selecting(state)
-        else:
-            return await callback.answer('⏳ Уже обрабатывается предыдущий выбор, дождитесь.')
-    else:
-        await set_user_busy(state, True)
-    # отменяем таймер выбора формата
-    task = await get_pending_task(state)
-    if task and not task.done():
-        task.cancel()
-    await clear_pending_task(state)
+    await state.update_data({BUSY_KEY: True})
     await callback.message.answer('⏳ Скачиваем...')
+    # Получаем уровень и подписку
+    async with get_session() as session:
+        _, level, _ = await get_referral_stats(session, user.id)
+        sub = await is_subscriber(session, user.id)
+    await process_youtube_or_other(callback.message, url, user.id, 'youtube', state, mode, level, sub)
+
+
+# --- Универсальная функция скачивания ---
+async def process_youtube_or_other(message, url, user_id, platform, state, mode, level, sub):
     try:
-        yt = YTDLPDownloader()
-        # Получаем список форматов, ищем выбранный
-        formats = await yt.get_available_formats(url, user.id)
-        selected = next((f for f in formats if f['id'] == fmt_id), None)
-        if not selected:
-            return await callback.answer('Формат недоступен.')
-        if selected['type'] == 'video':
-            raw_result = await yt.download(url, user.id, callback.message, custom_format=selected['format'])
-            normalized = _normalize_download_result(raw_result)
-            if isinstance(normalized, tuple) and normalized and normalized[0] == 'DENIED_SIZE':
-                size_mb = normalized[1]
-                builder = InlineKeyboardBuilder()
-                builder.button(text='💳 Подписка', callback_data='subscribe:open')
-                await callback.message.answer(
-                    f'🚫 Видео больше лимита {MAX_FREE_VIDEO_MB} МБ (это {size_mb} МБ) и недоступно бесплатно.',
-                    reply_markup=builder.as_markup()
-                )
-                return
-            path = normalized
-            w, h = get_video_resolution(path)
-            asyncio.create_task(send_video(callback.bot, callback.message, callback.message.chat.id, user.id, path, w, h))
-        elif selected['type'] == 'audio':
-            path = await yt.download_audio(url, user.id, custom_format=selected['format'])
-            asyncio.create_task(send_audio(callback.bot, callback.message, callback.message.chat.id, path))
+        if platform == 'youtube':
+            from services.youtube import YTDLPDownloader
+            downloader = YTDLPDownloader()
+            max_mb = None
+            if not sub:
+                if level == 1:
+                    max_mb = 100
+                elif level == 2:
+                    max_mb = 300
+            if mode == 'audio':
+                file_path = await downloader.download_audio(url, user_id, message)
+                await send_audio(message.bot, message, message.chat.id, file_path)
+            else:
+                result = await downloader.download(url, message, user_id)
+                if isinstance(result, tuple) and result[0] == 'DENIED_SIZE':
+                    await message.answer(f'⚠️ Видео слишком большое: {result[1]} МБ. Ваш лимит — {max_mb or "безлимит"} МБ. Оформите подписку для снятия ограничений.')
+                    await state.update_data({BUSY_KEY: False})
+                    return
+                file_path = result
+                w, h = get_video_resolution(file_path)
+                await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
         else:
-            return await callback.answer('Неизвестный формат.')
+            from services import get_downloader
+            downloader = get_downloader(url)
+            file_path = await downloader.download(url, user_id)
+            w, h = get_video_resolution(file_path)
+            await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
         async with get_session() as session:
-            await log_user_activity(session, user.id)
-            await increment_download(session, user.id)
-            await increment_platform_download(session, user.id, 'youtube')
-            await increment_daily_download(session, user.id)
-            await add_download_link(session, user.id, url)
+            await add_or_update_user(session, user_id, getattr(message.from_user, 'first_name', None), getattr(message.from_user, 'username', None))
+            await log_user_activity(session, user_id)
+            await increment_platform_download(session, user_id, platform)
     except Exception as e:
-        log.log_error(f'Ошибка: {e}')
+        logger.error(f'Ошибка при скачивании: {e}')
         try:
-            await callback.message.answer('❗️ Ошибка при скачивании.')
+            await message.answer('❗️ Ошибка при скачивании, попробуйте позже.')
         except Exception:
             pass
     finally:
-        await clear_user_busy(state)
-    await clear_subscriber_selecting(state)
+        await state.update_data({BUSY_KEY: False})
+
+
+
 

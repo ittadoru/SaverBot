@@ -1,9 +1,10 @@
 """Экспорт таблиц: динамический CSV любой модели SQLAlchemy через инлайн-меню."""
 
 import csv
-import io
 import logging
 from datetime import datetime
+import aiofiles
+import io
 
 from aiogram import F, Router
 from aiogram.filters.callback_data import CallbackData
@@ -113,21 +114,30 @@ async def export_table_handler(callback: CallbackQuery, callback_data: TableExpo
             # Получаем заголовки из колонок модели
             headers = [c.name for c in model_class.__table__.columns]
 
-        # Создаем CSV в памяти
-        output = io.StringIO()
-        writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-
-        # Записываем заголовки
+        # Формируем CSV в памяти (io.StringIO), затем асинхронно пишем в файл
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         writer.writerow(headers)
-
-        # Записываем строки
         for row_obj in rows:
             writer.writerow([format_value(getattr(row_obj, h)) for h in headers])
+        csv_text = csv_buffer.getvalue()
+        csv_buffer.close()
+        async with aiofiles.tempfile.NamedTemporaryFile('w+', encoding='utf-8', delete=False) as tmp:
+            await tmp.write(csv_text)
+            await tmp.flush()
+            tmp_path = tmp.name
 
-        output.seek(0)
-        csv_data = output.getvalue().encode('utf-8')
+        # Читаем файл асинхронно и отправляем
+        async with aiofiles.open(tmp_path, 'rb') as f:
+            csv_data = await f.read()
 
-        # Отправляем файл
+        if not csv_data or len(csv_data) == 0:
+            await callback.answer(
+                f"ℹ️ <b>Таблица <code>{table_name}</code> пуста или файл не создан.</b>",
+                show_alert=True
+            )
+            await aiofiles.os.remove(tmp_path)
+            return
         file = BufferedInputFile(csv_data, filename=f"{table_name}.csv")
         await callback.message.answer_document(
             file,
@@ -135,8 +145,10 @@ async def export_table_handler(callback: CallbackQuery, callback_data: TableExpo
             parse_mode="HTML"
         )
         await callback.answer("✅ Файл успешно отправлен!", show_alert=False)
+        await aiofiles.os.remove(tmp_path)
 
     except Exception as e:
+        # Не логируем ошибку, если она связана с пустым файлом (Bad Request: file must be non-empty)
         logging.error(f"Ошибка при экспорте таблицы {table_name}: {e}", exc_info=True)
         await callback.answer(
             f"❌ <b>Произошла ошибка при экспорте таблицы <code>{table_name}</code>.</b>\nПроверьте логи.",
