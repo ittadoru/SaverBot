@@ -28,7 +28,7 @@ async def send_video(
     """
  
     file_size = await asyncio.to_thread(os.path.getsize, file_path)
-    TELEGRAM_LIMIT_MB = 45
+    TELEGRAM_LIMIT_MB = 40
     try:
         if file_size > TELEGRAM_LIMIT_MB * 1024 * 1024:
             file_name = await asyncio.to_thread(os.path.basename, file_path)

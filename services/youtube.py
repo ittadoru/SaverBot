@@ -25,6 +25,83 @@ from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
 logger = get_logger(__name__, platform="youtube")
 
 class YTDLPDownloader(BaseDownloader):
+    async def download_by_itag(self, url: str, itag: int, message, user_id: int | None = None) -> str | tuple[str, str]:
+        """
+        Скачивание видео по конкретному itag (mux если нужно).
+        """
+        filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
+        logger.info(f"⏬ [DOWNLOAD_BY_ITAG] start url={url} itag={itag}")
+        loop = asyncio.get_running_loop()
+        yt = YouTube(url)
+        stream = yt.streams.get_by_itag(itag)
+        if not stream:
+            raise Exception(f"No stream found for itag={itag}")
+        # Если progressive — просто скачиваем
+        if stream.is_progressive:
+            filesize_bytes = stream.filesize
+            filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
+            logger.info(f"[SIZE] video size: {filesize_mb:.2f} MB (bytes={filesize_bytes})")
+            def run_download():
+                stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(filename))
+            try:
+                await loop.run_in_executor(None, run_download)
+            except Exception as e:
+                import traceback
+                err = str(e)
+                logger.error("download_by_itag failed err=%s", err)
+                logger.error(traceback.format_exc())
+                if message:
+                    try:
+                        await message.bot.send_message(
+                            PRIMARY_ADMIN_ID,
+                            f"❗️Ошибка YouTube (by itag):\n<pre>{err}</pre>",
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
+                raise
+            logger.info("✅ [DOWNLOAD_BY_ITAG] done file=%s", filename)
+            return filename
+        # Если не progressive — mux video+audio
+        else:
+            # Скачиваем видео
+            video_path = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}_video.mp4")
+            def run_download_video():
+                stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(video_path))
+            await loop.run_in_executor(None, run_download_video)
+            # Скачиваем лучший аудиопоток
+            audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').order_by('abr').desc().first()
+            if not audio_stream:
+                raise Exception("No audio/mp4 stream found for mux")
+            audio_path = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}_audio.m4a")
+            def run_download_audio():
+                audio_stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(audio_path))
+            await loop.run_in_executor(None, run_download_audio)
+            # Mux video+audio через ffmpeg
+            import subprocess
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-i", audio_path,
+                "-c:v", "copy",
+                "-c:a", "copy",
+                filename
+            ]
+
+            logger.info(f"[MUX] ffmpeg cmd: {' '.join(cmd)}")
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.error(f"ffmpeg mux error: {stderr.decode()}")
+                raise Exception(f"ffmpeg mux error: {stderr.decode()}")
+            # Удаляем временные файлы
+            try:
+                os.remove(video_path)
+                os.remove(audio_path)
+            except Exception:
+                pass
+            logger.info("✅ [DOWNLOAD_BY_ITAG] muxed file=%s", filename)
+            return filename
 
     async def get_available_video_options(self, url: str, max_filesize_mb: int = 1024) -> dict:
         """
@@ -65,7 +142,7 @@ class YTDLPDownloader(BaseDownloader):
             }
         return await loop.run_in_executor(None, fetch)
     
-    
+
     async def download(self, url: str, message, user_id: int | None = None) -> str | tuple[str, str]:
         """
         Скачивание лучшего mp4 (progressive, со звуком) через pytubefix.
