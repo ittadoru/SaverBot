@@ -216,13 +216,18 @@ async def is_user_exists(session: AsyncSession, user_id: int) -> bool:
 
 async def get_user_ids_without_subscription(session: AsyncSession) -> list[int]:
     """
-    Возвращает список ID пользователей, у которых нет активной подписки.
-    Использует LEFT JOIN для эффективного поиска.
+    Возвращает список ID пользователей, у которых нет активной подписки (нет подписки или истекла).
     """
+    from sqlalchemy import or_
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
     query = (
         select(User.id)
         .outerjoin(Subscriber, User.id == Subscriber.user_id)
-        .where(Subscriber.user_id.is_(None))
+        .where(
+            (Subscriber.user_id.is_(None)) |
+            (Subscriber.expire_at <= now)
+        )
     )
     result = await session.execute(query)
     return list(result.scalars().all())

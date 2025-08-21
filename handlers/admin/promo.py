@@ -286,7 +286,7 @@ async def confirm_remove_all_promocodes(callback: CallbackQuery) -> None:
         await remove_all_promocodes(session)
         logging.warning(f"Админ {callback.from_user.id} удалил ВСЕ промокоды.")
 
-    await callback.answer("✅ <b>Все промокоды были успешно удалены!</b>", show_alert=True)
+    await callback.answer("✅ Все промокоды были успешно удалены!", show_alert=True)
     await show_promo_menu(callback)
 
 

@@ -139,8 +139,7 @@ async def delete_all_users_handler(callback: types.CallbackQuery, callback_data:
     Обрабатывает подтверждение или отмену удаления всех пользователей, дружелюбно и с эмодзи.
     """
     if not callback_data.confirm:
-        await callback.message.edit_text("❌ <b>Удаление отменено.</b>", parse_mode="HTML")
-        await list_users_handler(callback)
+        await manage_users_menu(callback)
         return
 
     async with get_session() as session:
