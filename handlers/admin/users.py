@@ -6,7 +6,7 @@ from math import ceil
 from aiogram import F, Router, types
 from aiogram.filters.callback_data import CallbackData
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
-from utils.keyboards import pagination_keyboard, back_button
+from utils.keyboards import pagination_keyboard
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import ADMINS
@@ -15,24 +15,23 @@ from db.subscribers import is_subscriber
 from db.users import (delete_user_by_id, get_all_user_ids, get_total_users,
                     get_users_by_ids)
 
+
 logger = logging.getLogger(__name__)
 
 router = Router()
 router.message.filter(F.from_user.id.in_(ADMINS))
 router.callback_query.filter(F.from_user.id.in_(ADMINS))
 
-USERS_PER_PAGE = 10
+USERS_PER_PAGE = 20
 
 
 class UsersPageCallback(CallbackData, prefix="users_page"):
     """Фабрика колбэков для пагинации пользователей."""
-
     page: int
 
 
 class ConfirmDeleteAllCallback(CallbackData, prefix="confirm_delete_all"):
     """Фабрика колбэков для подтверждения удаления всех пользователей."""
-
     confirm: bool
 
 async def manage_users_menu(callback: types.CallbackQuery):
@@ -50,7 +49,6 @@ async def manage_users_menu(callback: types.CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
-
 
 async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[str, InlineKeyboardBuilder]:
     """
@@ -76,7 +74,6 @@ async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[
     nav = pagination_keyboard(page, total_pages, prefix="users_page", extra_buttons=[("⬅️ Назад", "manage_users")])
     return text, nav
 
-
 @router.callback_query(F.data == "all_users")
 async def list_users_handler(callback: types.CallbackQuery) -> None:
     """
@@ -89,7 +86,6 @@ async def list_users_handler(callback: types.CallbackQuery) -> None:
         )
     logger.info("Администратор %d запросил список пользователей.", callback.from_user.id)
     await callback.answer()
-
 
 @router.callback_query(UsersPageCallback.filter())
 async def paginate_users_handler(callback: types.CallbackQuery, callback_data: UsersPageCallback) -> None:
@@ -108,7 +104,6 @@ async def paginate_users_handler(callback: types.CallbackQuery, callback_data: U
         page,
     )
     await callback.answer()
-
 
 @router.callback_query(F.data == "delete_all_users")
 async def confirm_delete_all_users_handler(callback: types.CallbackQuery) -> None:
@@ -131,7 +126,6 @@ async def confirm_delete_all_users_handler(callback: types.CallbackQuery) -> Non
         reply_markup=builder.as_markup(),
     )
     await callback.answer()
-
 
 @router.callback_query(ConfirmDeleteAllCallback.filter())
 async def delete_all_users_handler(callback: types.CallbackQuery, callback_data: ConfirmDeleteAllCallback) -> None:

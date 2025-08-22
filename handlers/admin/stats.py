@@ -1,14 +1,12 @@
 """Статистика админа: агрегированные метрики пользователей, подписок и промокодов."""
-
-import logging
-
-
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 
+import logging
 from db.base import get_session
 from db.promocodes import get_active_promocodes_count
+from db.platforms import get_top_platform_downloads
 from db.subscribers import (
     get_subscriptions_count_for_period,
     get_total_subscribers,
@@ -17,7 +15,6 @@ from db.users import (
     get_active_users_today,
     get_new_users_count_for_period, get_total_users
 )
-from db.platforms import get_top_platform_downloads
 
 router = Router()
 

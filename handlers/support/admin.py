@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from aiogram import F, Router
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message
 
 from config import SUPPORT_GROUP_ID
 from db.base import get_session
@@ -69,7 +69,6 @@ async def admin_close_ticket_handler(event) -> None:
             user_id,
             topic_id,
         )
-
 
 @router.message()
 async def admin_reply_handler(message: Message) -> None:

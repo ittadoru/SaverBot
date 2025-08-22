@@ -1,10 +1,6 @@
 """Подписка: выбор тарифа и генерация ссылки на оплату."""
-
-from __future__ import annotations
-
 import logging
 from contextlib import suppress
-from typing import Optional
 
 from aiogram import F, Router, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -22,19 +18,21 @@ BUY_PREFIX = "buy_tariff:"
 PARSE_MODE = "HTML"
 SUBSCRIBE_HEADER = (
     "<b>💎 Преимущества подписки:</b>\n"
-    "• Безлимит на скачивания и размер файлов\n"
-    "• Нет рекламы и ограничений\n"
-    "• VIP-статус и ранний доступ к новым функциям\n"
-    "• Приоритетная поддержка\n"
-    "• Бонусы и подарки для подписчиков\n\n"
+    "• 50 скачиваний в сутки\n"
+    "• Лимит размера файлов в 7 раз выше\n"
+    "• Ссылки на скачивание живут дольше\n"
+    "• Нет рекламы\n"
+    "• Не требуется подписка на каналы\n"
+    "• Доступно любое качество YouTube и аудио\n"
+    "• Приоритетная поддержка\n\n"
     "Выберите вариант подписки:"
 )
-
 
 def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
     """Строит клавиатуру тарифов с кнопкой назад."""
     builder = InlineKeyboardBuilder()
-    for t in tariffs:
+    # Сортировка тарифов по цене по возрастанию
+    for t in sorted(tariffs, key=lambda x: x.price):
         builder.button(
             text=f"{t.name} — {t.price} RUB",
             callback_data=f"{BUY_PREFIX}{t.id}"
@@ -88,7 +86,6 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     """Создаёт платёж и выдаёт кнопку оплаты тарифа."""
     user_id = callback.from_user.id
     raw = callback.data or ""
-    tariff_id: Optional[int] = None
     try:
         tariff_id = int(raw.removeprefix(BUY_PREFIX))
     except ValueError:
@@ -116,7 +113,7 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
         logger.info(
             "Создан платёж %s для user=%s tariff=%s price=%s", payment_id, user_id, tariff.id, tariff.price
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("Ошибка создания платежа для user=%s tariff=%s", user_id, tariff_id)
         await callback.answer("Ошибка создания платежа. Попробуйте позже.", show_alert=True)
         return

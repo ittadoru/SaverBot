@@ -2,6 +2,7 @@ from sqlalchemy import select, func
 from db.downloads import DownloadLink
 from utils.platform_detect import detect_platform
 
+
 PLATFORMS = ["youtube", "tiktok", "instagram"]
 
 async def get_top_platform_downloads(session, limit=5):

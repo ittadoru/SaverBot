@@ -1,7 +1,3 @@
-"""
-Модель каналов и фича-флагов.
-CRUD-операции, утилиты проверки подписки, работа с feature flag.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass

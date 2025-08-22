@@ -47,15 +47,14 @@ async def main() -> None:
         logger.info("Polling cancelled.")
         raise
     finally:
-        # Явно закрываем сессию бота
         await bot.session.close()
         logger.info("Bot session closed.")
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Бот остановлен пользователем.")
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Критическая ошибка при запуске")

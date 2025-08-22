@@ -30,24 +30,37 @@ logger = logging.getLogger(__name__)  # (12) стандартный логгер
 
 app = FastAPI()
 
-def render_not_found_page():
-    try:
-        async def read_html():
-            async with aiofiles.open("templates/page_not_found.html", encoding="utf-8") as f:
-                return await f.read()
-        html = asyncio.run(read_html())
-    except Exception:
-        html = "<h1>404 Not Found</h1><p>Видео не найдено.</p>"
-    return HTMLResponse(content=html, status_code=404)
-
 # ------------------------------- Video File Serve ------------------------------------
 @app.get("/video/{name}.mp4")
 async def serve_video(name: str):
     """Отдаёт mp4-файл из папки downloads по адресу /video/{name}.mp4"""
     file_path = os.path.join("downloads", f"{name}.mp4")
     if not await asyncio.to_thread(os.path.isfile, file_path):
-        return render_not_found_page()
+        try:
+            async with aiofiles.open("templates/video_not_found.html", encoding="utf-8") as f:
+                html = await f.read()
+        except Exception:
+            html = "<h1>404 Not Found</h1><p>Видео не найдено.</p>"
+        return HTMLResponse(content=html, status_code=404)
+    
     return FileResponse(file_path, media_type="video/mp4", filename=f"{name}.mp4")
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc):
+    if request.url.path.startswith("/video/"):
+        try:
+            async with aiofiles.open("templates/video_not_found.html", encoding="utf-8") as f:
+                html = await f.read()
+        except Exception:
+            html = "<h1>404 Not Found</h1><p>Видео не найдено.</p>"
+    else:
+        try:
+            async with aiofiles.open("templates/page_not_found.html", encoding="utf-8") as f:
+                html = await f.read()
+        except Exception:
+            html = "<h1>404 Not Found</h1><p>Страница не найдена.</p>"
+
+    return HTMLResponse(content=html, status_code=404)
 
 # ---------------------------- Логирование Uvicorn ---------------------------
 class BotLogHandler(logging.Handler):  # type: ignore[misc]

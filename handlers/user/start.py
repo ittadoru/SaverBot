@@ -1,10 +1,9 @@
+
 """Старт: регистрация/обновление пользователя и выдача приветственного промокода новым."""
 
-from __future__ import annotations
-
 import logging
+
 import random
-from typing import Optional
 
 from aiogram import Router, types
 from aiogram.filters import Command
@@ -16,19 +15,18 @@ from db.subscribers import add_subscriber_with_duration
 from handlers.user.referral import get_referral_stats
 from config import SUBSCRIPTION_LIFETIME_DAYS
 
+
 logger = logging.getLogger(__name__)
 
-
-# --- Константы (нет «магических» чисел/строк в коде ниже) ---
 PROMO_DURATION_DAYS = 7
 PROMO_PREFIX = "WELCOME"
 PROMO_RANDOM_MIN = 100_000
 PROMO_RANDOM_MAX = 999_999
-PROMO_MAX_TRIES = 5  # попыток сгенерировать уникальный код
+PROMO_MAX_TRIES = 5
 
 router = Router()
 
-async def _generate_unique_promocode(session, tries: int = PROMO_MAX_TRIES) -> Optional[str]:
+async def _generate_unique_promocode(session, tries: int = PROMO_MAX_TRIES) -> str | None:
     """Пытается создать и сохранить уникальный промокод, возвращает код или None.
 
     Проверяем коллизии через запрос существующего кода (быстро и просто).

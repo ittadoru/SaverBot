@@ -2,7 +2,6 @@
 
 import logging
 import os
-import aiofiles.os
 import asyncio
 import re
 from aiogram import F, Router
@@ -19,7 +18,6 @@ class LogCallback(CallbackData, prefix="log_select"):
 
 
 router = Router()
-
 
 async def get_current_log():
     """Возвращает имя текущего лога, если есть."""
@@ -40,9 +38,6 @@ async def get_archived_logs():
     )
     return archived_logs
 
-
-
-# Главное меню экспорта логов
 @router.callback_query(F.data == "get_logs")
 async def show_log_main_menu(callback: CallbackQuery):
     """Показывает главное меню экспорта логов: текущий лог и архивные логи."""
@@ -63,7 +58,6 @@ async def show_log_main_menu(callback: CallbackQuery):
     )
     await callback.answer()
 
-# Меню архивных логов
 @router.callback_query(F.data == "show_archived_logs")
 async def show_archived_logs_menu(callback: CallbackQuery):
     """Показывает меню с архивными логами (только даты)."""
@@ -92,7 +86,6 @@ async def show_archived_logs_menu(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
-
 
 @router.callback_query(LogCallback.filter())
 async def send_log_file(callback: CallbackQuery, callback_data: LogCallback):

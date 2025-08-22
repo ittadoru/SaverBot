@@ -1,10 +1,8 @@
-"""Активация промокодов: ввод, валидация, активация, повторные попытки и отмена."""
 
-from __future__ import annotations
+"""Активация промокодов: ввод, валидация, активация, повторные попытки и отмена."""
 
 import logging
 import re
-from typing import Any
 
 from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
@@ -56,7 +54,7 @@ def _build_same_code_message() -> str:
     return "ℹ️ Этот код уже проверяли. Введите другой или Отмена."
 
 
-async def _safe_delete(bot: Any, chat_id: int, message_id: int) -> None:
+async def _safe_delete(bot, chat_id: int, message_id: int) -> None:
     try:
         await bot.delete_message(chat_id, message_id)
     except TelegramBadRequest:

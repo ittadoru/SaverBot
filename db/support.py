@@ -1,10 +1,13 @@
-"""
-Модели тикетов поддержки и CRUD-операции: создание, сообщения, поиск и закрытие.
-Включает подробные docstring, type hints, __repr__ и безопасную обработку транзакций.
-"""
-
-
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, BigInteger, String, func, select
+from sqlalchemy import (
+    Column, 
+    DateTime, 
+    ForeignKey, 
+    Integer, 
+    BigInteger, 
+    String, 
+    func, 
+    select
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import SQLAlchemyError

@@ -22,7 +22,9 @@ def get_main_menu_keyboard():
         InlineKeyboardButton(text="👥 Пригласить друга", callback_data="invite_friend"),
         InlineKeyboardButton(text="📊 Мои рефералы", callback_data="my_referrals")
     )
-    builder.row(InlineKeyboardButton(text="ℹ️ Подробнее", callback_data="more_info"))
+    builder.row(
+        InlineKeyboardButton(text="ℹ️ Подробнее", callback_data="more_info"),
+    )
     return builder.as_markup()
 
 MAIN_MENU_TEXT = (

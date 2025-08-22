@@ -23,10 +23,21 @@ cancel_kb = InlineKeyboardMarkup(
     inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_support")]]
 )
 
+
+from aiogram.types import CallbackQuery, Message
+
 @router.callback_query(F.data == "help")
-async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> None:
+@router.message(F.text.lower() == "/help")
+async def start_support_handler(event, state: FSMContext) -> None:
     """Старт / помощь: создаёт или переиспользует персональный тикет пользователя."""
-    user = callback.from_user
+    if isinstance(event, CallbackQuery):
+        user = event.from_user
+        answer_func = event.message.answer
+        done_func = event.answer
+    else:
+        user = event.from_user
+        answer_func = event.answer
+        done_func = lambda *a, **kw: None
     user_id = user.id
     async with get_session() as session:
         # гарантируем запись пользователя
@@ -40,10 +51,10 @@ async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> N
         if ticket and ticket.is_closed == 0:
             # активный есть — просто переводим в диалог
             await state.set_state(Support.in_dialog)
-            await callback.message.answer(
+            await answer_func(
                 "У вас уже открыт диалог с поддержкой. Напишите сообщение."
             )
-            await callback.answer()
+            await done_func()
             return
         elif ticket and ticket.is_closed == 1:
             # переоткрываем существующий
@@ -55,7 +66,7 @@ async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> N
                 try:
                     # попытка переименовать тему (если доступно)
                     new_name = f"Тикет @{user.username}" if user.username else f"Тикет {user.id}"
-                    await callback.message.bot.edit_forum_topic(
+                    await event.bot.edit_forum_topic(
                         chat_id=SUPPORT_GROUP_ID,
                         message_thread_id=ticket.topic_id,
                         name=new_name[:128],  # ограничение TG
@@ -66,18 +77,18 @@ async def start_support_handler(callback: CallbackQuery, state: FSMContext) -> N
             await session.commit()
             await state.set_state(Support.waiting_for_question)
             text = "Диалог с поддержкой переоткрыт. Опишите проблему одним сообщением." + (" (Название обновлено)" if renamed else "")
-            await callback.message.answer(text, reply_markup=cancel_kb)
-            await callback.answer()
+            await answer_func(text, reply_markup=cancel_kb)
+            await done_func()
             return
 
     # Нет тикета — попросим первое сообщение
     await state.set_state(Support.waiting_for_question)
-    await callback.message.answer(
+    await answer_func(
         "Опишите вашу проблему или вопрос одним сообщением. "
         "Я передам его в поддержку. Вы можете отправить текст, фото, видео или документ.",
         reply_markup=cancel_kb
     )
-    await callback.answer()
+    await done_func()
 
 
 @router.message(Support.waiting_for_question)

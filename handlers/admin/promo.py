@@ -1,22 +1,13 @@
-PROMOCODES_PER_PAGE = 20
-
 from math import ceil
 from aiogram.filters.callback_data import CallbackData
-
-# Для пагинации
-class PromoPageCallback(CallbackData, prefix="promo_page"):
-    page: int
-"""Управление промокодами в админ-панели: добавление, удаление, просмотр и массовое очищение."""
-
-import logging
-
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils.keyboards import pagination_keyboard
-
+import logging
 from config import ADMINS
 from db.base import get_session
 from db.promocodes import (add_promocode, get_all_promocodes,
@@ -26,7 +17,13 @@ from states.promo import PromoStates
 router = Router()
 
 
-# --- Клавиатуры и навигация ---
+PROMOCODES_PER_PAGE = 20
+class PromoPageCallback(CallbackData, prefix="promo_page"):
+    """
+    Управление промокодами в админ-панели: добавление, удаление, просмотр и массовое очищение.
+    """
+    page: int
+
 
 def get_promo_menu_keyboard():
     """
@@ -40,7 +37,6 @@ def get_promo_menu_keyboard():
     builder.row(InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="admin_menu"))
     return builder.as_markup()
 
-
 async def show_promo_menu(callback: CallbackQuery) -> None:
     """
     Отображает главное меню управления промокодами с дружелюбным приветствием.
@@ -52,8 +48,6 @@ async def show_promo_menu(callback: CallbackQuery) -> None:
     )
     await callback.answer()
 
-
-# --- Добавление промокода ---
 @router.callback_query(F.data == "add_promocode")
 async def add_promocode_start(callback: CallbackQuery, state: FSMContext) -> None:
     """
@@ -73,7 +67,6 @@ async def add_promocode_start(callback: CallbackQuery, state: FSMContext) -> Non
     )
     await state.set_state(PromoStates.add)
     await callback.answer()
-
 
 @router.message(PromoStates.add)
 async def process_add_promocode(message: types.Message, state: FSMContext) -> None:
@@ -115,17 +108,11 @@ async def process_add_promocode(message: types.Message, state: FSMContext) -> No
             parse_mode="HTML"
         )
 
-
-# --- Удаление одного промокода ---
-
-
-# --- Новый способ: удаление промокода через кнопки ---
 @router.callback_query(F.data.startswith("remove_promocode_page"))
 async def remove_promocode_page(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Показывает страницу с промокодами для удаления (пагинация).
     """
-    # Получаем номер страницы из callback_data
     data = callback.data.split(":")
     page = int(data[1]) if len(data) > 1 and data[1].isdigit() else 1
     async with get_session() as session:
@@ -144,10 +131,8 @@ async def remove_promocode_page(callback: CallbackQuery, state: FSMContext) -> N
         )
     builder.adjust(1)
     nav = pagination_keyboard(page, total_pages, prefix="remove_promocode_page")
-    # Добавляем кнопку назад
-    from aiogram.types import InlineKeyboardMarkup
     nav_markup = nav.inline_keyboard if isinstance(nav, InlineKeyboardMarkup) else nav
-    builder.row(*nav_markup[-1])  # Кнопка назад
+    builder.row(*nav_markup[-1])
     for row in nav_markup[:-1]:
         builder.row(*row)
     await callback.message.edit_text(
@@ -172,11 +157,8 @@ async def remove_promocode_start(callback: CallbackQuery, state: FSMContext) -> 
         )
         await callback.answer()
         return
-    # Переходим на первую страницу
     await remove_promocode_page(callback, state)
 
-
-# --- Обработка нажатия на кнопку удаления конкретного промокода ---
 @router.callback_query(F.data.startswith("remove_promo:"))
 async def remove_promocode_button(callback: CallbackQuery) -> None:
     """
@@ -195,7 +177,6 @@ async def remove_promocode_button(callback: CallbackQuery) -> None:
             )
         else:
             await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=new_buttons))
-
 
 @router.message(PromoStates.remove)
 async def process_remove_promocode(message: types.Message, state: FSMContext) -> None:
@@ -218,11 +199,6 @@ async def process_remove_promocode(message: types.Message, state: FSMContext) ->
     await message.answer(text, parse_mode="HTML")
     await state.clear()
 
-
-# --- Просмотр всех промокодов ---
-
-
-# Пагинация для просмотра всех промокодов
 @router.callback_query(F.data.startswith("all_promocodes_page"))
 async def show_all_promocodes_page(callback: CallbackQuery) -> None:
     data = callback.data.split(":")
@@ -230,8 +206,6 @@ async def show_all_promocodes_page(callback: CallbackQuery) -> None:
     async with get_session() as session:
         promocodes = await get_all_promocodes(session)
     total = len(promocodes)
-    PROMOCODES_PER_PAGE = 20
-    from math import ceil
     total_pages = max(1, ceil(total / PROMOCODES_PER_PAGE))
     page = max(1, min(page, total_pages))
     start = (page - 1) * PROMOCODES_PER_PAGE
@@ -252,11 +226,7 @@ async def show_all_promocodes_page(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "all_promocodes")
 async def show_all_promocodes(callback: CallbackQuery) -> None:
-    # Переходим на первую страницу
     await show_all_promocodes_page(callback)
-
-
-# --- Удаление ВСЕХ промокодов (с подтверждением) ---
 
 @router.callback_query(F.data == "remove_all_promocodes")
 async def ask_remove_all_confirmation(callback: CallbackQuery) -> None:
@@ -276,7 +246,6 @@ async def ask_remove_all_confirmation(callback: CallbackQuery) -> None:
     )
     await callback.answer()
 
-
 @router.callback_query(F.data == "confirm_remove_all")
 async def confirm_remove_all_promocodes(callback: CallbackQuery) -> None:
     """
@@ -288,9 +257,6 @@ async def confirm_remove_all_promocodes(callback: CallbackQuery) -> None:
 
     await callback.answer("✅ Все промокоды были успешно удалены!", show_alert=True)
     await show_promo_menu(callback)
-
-
-# --- Возврат в меню ---
 
 @router.callback_query(F.data == "promocode_menu_show")
 async def back_to_promo_menu(callback: CallbackQuery) -> None:

@@ -8,6 +8,7 @@ from .menu import router as menu_router
 from .download import router as download_router
 from .myhistory import router as myhistory_router
 from .referral import router as referral_router
+from .referral_info import router as referral_info_router
 
 routers = [
     about_router,
@@ -18,5 +19,6 @@ routers = [
     menu_router,
     download_router,
     myhistory_router,
-    referral_router
+    referral_router,
+    referral_info_router
 ]

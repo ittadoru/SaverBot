@@ -1,7 +1,7 @@
-from aiogram.filters import Command
 """
 Обработчики реферальной системы пользователя: генерация ссылки, просмотр своих рефералов.
 """
+from aiogram.filters import Command
 
 from aiogram import Router
 from aiogram.types import CallbackQuery
@@ -13,9 +13,8 @@ from sqlalchemy import select, func
 
 router = Router()
 
-
-# Универсальная функция для отправки реферальной ссылки
-async def send_invite_link(user_id, bot, message_or_callback):
+async def send_invite_link(user_id: int, bot, message_or_callback):
+    """Отправляет пользователю его реферальную ссылку."""
     bot_username = (await bot.me()).username
     ref_link = get_ref_link(bot_username, user_id)
     text = (
@@ -73,5 +72,5 @@ async def get_referral_stats(session, user_id: int):
         level = 2
     else:
         level = 1
-    is_vip = level >= 3
+    is_vip = level >= 4
     return count, level, is_vip

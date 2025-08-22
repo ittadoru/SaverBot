@@ -51,7 +51,6 @@ async def show_user_history_prompt(
     )
     await callback.answer()
 
-
 @router.message(HistoryStates.waiting_for_id_or_username)
 async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bot) -> None:
     """
@@ -64,8 +63,6 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
 
     user_identifier = message.text.strip()
     user: Optional[User] = None
-
-    # Удаляем сообщение администратора с ID/username
 
     await message.delete()
 
@@ -88,24 +85,19 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
             )
             return
 
-        # Получение информации о подписке
         expiry_date = await db_subscribers.get_subscriber_expiry(session, user.id)
         now_utc = datetime.now(timezone.utc)
-        # Нормализуем возможный naive datetime (защитно, хотя в модели timezone=True)
         if expiry_date and expiry_date.tzinfo is None:
             expiry_date = expiry_date.replace(tzinfo=timezone.utc)
 
         if expiry_date and expiry_date > now_utc:
-            # Форматируем в UTC (можно позже адаптировать под локаль)
             subscription_status = f"✅ Активна до <b>{expiry_date.strftime('%d.%m.%Y %H:%M')}</b> UTC"
         else:
             subscription_status = "❌ Не активна"
 
-        # Последние 3 ссылки
         last_links = await db_downloads.get_last_links(session, user.id, limit=3)
         links_block = "\n".join(last_links) if last_links else "(нет недавних ссылок)"
 
-        # Формирование текста сообщения
         user_info_text = (
             f"<b>👤 Карточка пользователя</b>\n\n"
             f"<b>ID:</b> <code>{user.id}</code>\n"
@@ -116,7 +108,6 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
             f"<b>Последние 3 ссылки:</b>\n<pre>{links_block}</pre>"
         )
 
-    # Создание клавиатуры
     builder = InlineKeyboardBuilder()
     builder.button(
         text="🗑️ Удалить пользователя",
@@ -125,11 +116,6 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
     builder.button(text="⬅️ Назад к списку", callback_data="manage_users")
     builder.adjust(1)
 
-    logging.info(
-        "Администратор %d просмотрел информацию о пользователе %d",
-        message.from_user.id,
-        user.id,
-    )
     await bot.edit_message_text(
         text=user_info_text,
         chat_id=message.chat.id,
@@ -137,7 +123,6 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
         parse_mode="HTML",
         reply_markup=builder.as_markup(),
     )
-
 
 @router.callback_query(UserCallback.filter(F.action == "delete"))
 async def delete_user_handler(

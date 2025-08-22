@@ -1,5 +1,3 @@
-"""Модель промокода и операции: создание, активация, подсчёт и удаление (одного/всех)."""
-
 from sqlalchemy import Column, Integer, String, delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 

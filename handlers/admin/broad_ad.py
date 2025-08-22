@@ -1,27 +1,31 @@
-
 from aiogram import Router, F, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramAPIError
+
 import asyncio
 from contextlib import suppress
 import logging
-from db.base import get_session
-from db.users import get_user_ids_without_subscription
 from utils.keyboards import back_button
 from config import BROADCAST_PROGRESS_UPDATE_INTERVAL, BROADCAST_PER_MESSAGE_DELAY
+from db.base import get_session
+from db.users import get_user_ids_without_subscription
+from handlers.user.referral import get_referral_stats
+
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 class BroadcastAdStates(StatesGroup):
+    """Состояния для конструктора рекламной рассылки."""
     waiting_text = State()
     waiting_button_text = State()
     waiting_button_url = State()
     waiting_media = State()
 
 def _keyboard(send_button_label: str) -> InlineKeyboardMarkup:
+    """Возвращает клавиатуру конструктора рассылки."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📝 Текст", callback_data="ad_broadcast:set_text"),
          InlineKeyboardButton(text="📌 Кнопка", callback_data="ad_broadcast:set_button"),
@@ -33,12 +37,14 @@ def _keyboard(send_button_label: str) -> InlineKeyboardMarkup:
 
 @router.callback_query(F.data == "ad_broadcast_start")
 async def start_broadcast_ad(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Запускает конструктор рекламной рассылки."""
     await state.clear()
     await state.update_data(constructor_message_id=callback.message.message_id)
     await _edit_constructor(callback.message, state, bot)
     await callback.answer()
 
 async def _edit_constructor(message: Message, state: FSMContext, bot: Bot):
+    """Редактирует сообщение конструктора рассылки."""
     with suppress(TelegramAPIError):
         await message.edit_text(
             "💸 Рекламная рассылка\n\nРасскажите о новых возможностях или скидках тем, у кого нет подписки.",
@@ -48,6 +54,7 @@ async def _edit_constructor(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "ad_broadcast:cancel")
 async def cancel_broadcast_ad(callback: CallbackQuery, state: FSMContext):
+    """Отмена рекламной рассылки и возврат в меню администратора."""
     from handlers.admin.menu import get_admin_menu_keyboard
     await state.clear()
     await callback.message.edit_text("🔐 Админ-панель", reply_markup=get_admin_menu_keyboard())
@@ -55,6 +62,7 @@ async def cancel_broadcast_ad(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "ad_broadcast:set_text")
 async def set_text(callback: CallbackQuery, state: FSMContext):
+    """Запрашивает текст рекламы у администратора."""
     await state.set_state(BroadcastAdStates.waiting_text)
     prompt = await callback.message.answer("Введите текст рекламы:")
     await state.update_data(prompt_message_id=prompt.message_id)
@@ -62,12 +70,14 @@ async def set_text(callback: CallbackQuery, state: FSMContext):
 
 @router.message(BroadcastAdStates.waiting_text)
 async def process_text(message: Message, state: FSMContext, bot: Bot):
+    """Сохраняет текст рекламы и очищает состояние."""
     await state.update_data(text=message.text)
     await state.set_state(None)
     await _cleanup(message, state, bot)
 
 @router.callback_query(F.data == "ad_broadcast:set_button")
 async def set_button_text(callback: CallbackQuery, state: FSMContext):
+    """Запрашивает текст кнопки для рекламы."""
     await state.set_state(BroadcastAdStates.waiting_button_text)
     prompt = await callback.message.answer("Введите текст кнопки:")
     await state.update_data(prompt_message_id=prompt.message_id)
@@ -75,6 +85,7 @@ async def set_button_text(callback: CallbackQuery, state: FSMContext):
 
 @router.message(BroadcastAdStates.waiting_button_text)
 async def process_button_text(message: Message, state: FSMContext, bot: Bot):
+    """Сохраняет текст кнопки и запрашивает URL."""
     await state.update_data(button_text=message.text)
     await state.set_state(BroadcastAdStates.waiting_button_url)
     await _cleanup(message, state, bot)
@@ -83,6 +94,7 @@ async def process_button_text(message: Message, state: FSMContext, bot: Bot):
 
 @router.message(BroadcastAdStates.waiting_button_url)
 async def process_button_url(message: Message, state: FSMContext, bot: Bot):
+    """Сохраняет URL кнопки для рекламы."""
     url = (message.text or "").strip()
     if not (url.startswith("http://") or url.startswith("https://")):
         await message.answer("Неверный URL. Начните с http:// или https://")
@@ -93,6 +105,7 @@ async def process_button_url(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "ad_broadcast:set_media")
 async def set_media(callback: CallbackQuery, state: FSMContext):
+    """Запрашивает медиафайл для рекламы."""
     await state.set_state(BroadcastAdStates.waiting_media)
     prompt = await callback.message.answer("Пришлите фото или видео для рекламы (или /skip для пропуска):")
     await state.update_data(prompt_message_id=prompt.message_id)
@@ -100,6 +113,7 @@ async def set_media(callback: CallbackQuery, state: FSMContext):
 
 @router.message(BroadcastAdStates.waiting_media)
 async def process_media(message: Message, state: FSMContext, bot: Bot):
+    """Сохраняет медиафайл для рекламы или пропускает шаг."""
     media_id = media_type = None
     if message.photo:
         media_id, media_type = message.photo[-1].file_id, "photo"
@@ -119,6 +133,7 @@ async def process_media(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "ad_broadcast:preview")
 async def preview(callback: CallbackQuery, state: FSMContext):
+    """Показывает предпросмотр рекламного сообщения."""
     data = await state.get_data()
     text = data.get("text")
     if not text:
@@ -136,6 +151,7 @@ async def preview(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "ad_broadcast:send")
 async def send_broadcast_ad(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Запускает отправку рекламной рассылки."""
     data = await state.get_data()
     text = data.get("text")
     if not text:
@@ -147,14 +163,21 @@ async def send_broadcast_ad(callback: CallbackQuery, state: FSMContext, bot: Bot
     await callback.answer()
 
 async def _send_task(bot: Bot, admin_id: int, data: dict):
-    from db.base import get_session
-    from db.users import get_user_ids_without_subscription
+    """Выполняет массовую отправку рекламных сообщений без подписки и VIP."""
+
     text = data.get("text")
     markup = _make_markup(data.get("button_text"), data.get("button_url"))
     media_id, media_type = data.get("media_id"), data.get("media_type")
     sent = failed = 0
     async with get_session() as session:
         user_ids = await get_user_ids_without_subscription(session)
+        # Исключаем VIP пользователей
+        filtered_user_ids = []
+        for user_id in user_ids:
+            _, _, is_vip = await get_referral_stats(session, user_id)
+            if not is_vip:
+                filtered_user_ids.append(user_id)
+        user_ids = filtered_user_ids
     if not user_ids:
         await bot.send_message(admin_id, "❗️ Аудитория пуста. Сообщение никому не отправлено.")
         return
@@ -173,16 +196,7 @@ async def _send_task(bot: Bot, admin_id: int, data: dict):
             sent += 1
         except TelegramAPIError as e:
             error_text = str(e)
-            if 'Too Many Requests' in error_text or 'FLOOD_WAIT' in error_text:
-                logger.error("FloodWait: превышен лимит Telegram при отправке %s: %s", user_id, error_text)
-            elif 'bot was blocked by the user' in error_text:
-                logger.info("BotBlocked: пользователь %s заблокировал бота", user_id)
-            elif 'chat not found' in error_text:
-                logger.info("ChatNotFound: чат %s не найден", user_id)
-            elif 'user is deactivated' in error_text:
-                logger.info("UserDeactivated: пользователь %s деактивирован", user_id)
-            else:
-                logger.warning("Не удалось отправить сообщение пользователю %s: %s", user_id, error_text)
+            logger.info("TelegramAPIError (%s)", error_text)
             failed += 1
         except Exception as e:
             logger.error("Неизвестная ошибка при отправке пользователю %s: %s", user_id, e, exc_info=True)
@@ -197,7 +211,9 @@ async def _send_task(bot: Bot, admin_id: int, data: dict):
                 )
             last_update = now
         await asyncio.sleep(BROADCAST_PER_MESSAGE_DELAY)
+
     logger.info("Рассылка 'ad_broadcast' завершена. Отправлено=%s Ошибок=%s", sent, failed)
+
     percent = int(sent / total * 100) if total else 0
     summary_text = (
         f"💸 [РЕКЛАМНАЯ РАССЫЛКА] Завершена!\n\n"
@@ -214,17 +230,20 @@ async def _send_task(bot: Bot, admin_id: int, data: dict):
     await bot.send_message(admin_id, summary_text, parse_mode="Markdown")
 
 def _make_markup(button_text, button_url):
+    """Создаёт InlineKeyboardMarkup для кнопки, если задана."""
     if button_text and button_url:
         return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=button_text, url=button_url)]])
     return None
 
 def _render_progress_bar(sent, total, bar_length=10):
+    """Рендерит прогресс-бар рассылки."""
     percent = sent / total if total else 0
     filled = int(bar_length * percent)
     bar = '🟩' * filled + '⬜' * (bar_length - filled)
     return f"Прогресс: [{bar}] {int(percent*100)}% ({sent}/{total})"
 
 async def _cleanup(message: Message, state: FSMContext, bot: Bot):
+    """Удаляет временные сообщения и обновляет конструктор."""
     data = await state.get_data()
     prompt_msg_id = data.get("prompt_message_id")
     constructor_msg_id = data.get("constructor_message_id")

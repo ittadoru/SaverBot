@@ -33,7 +33,6 @@ def get_admin_menu_keyboard():
     )
     return builder.as_markup()
 
-
 @router.message(Command("admin"))
 async def admin_panel(message: Message):
     """Обрабатывает команду /admin, отображая главное меню для администратора."""
@@ -47,7 +46,6 @@ async def admin_panel(message: Message):
         reply_markup=get_admin_menu_keyboard(),
         parse_mode="HTML"
     )
-
 
 @router.callback_query(F.data == "promocode_menu")
 async def promocode_menu_entry(callback: CallbackQuery):
@@ -77,6 +75,7 @@ async def back_to_admin_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "clear_downloads")
 async def clear_downloads_handler(callback: CallbackQuery):
+    """Очищает папку downloads и сообщает количество удалённых файлов."""
     deleted = await delete_all_files_in_downloads()
     await callback.answer()
     await callback.message.answer(f"🗑️ Удалено файлов из downloads: <b>{deleted}</b>", parse_mode="HTML")

@@ -2,16 +2,14 @@
 Обработчик админ-команды: топ-10 пользователей по количеству рефералов.
 Красивое оформление, кнопка "Назад".
 """
-
-
-import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
+
+import logging
 from db.base import get_session
 from db.users import get_top_referrers
-
 
 
 logger = logging.getLogger(__name__)

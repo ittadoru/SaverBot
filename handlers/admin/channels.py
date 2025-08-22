@@ -60,7 +60,6 @@ def _channels_menu_kb(channels, guard_on: bool):
     b.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
     return b.as_markup()
 
-
 @router.callback_query(F.data == "channels_menu")
 async def show_channels_menu(callback: CallbackQuery):
     """
@@ -78,8 +77,6 @@ async def show_channels_menu(callback: CallbackQuery):
         )
     await callback.answer()
 
-
-# --- Toggle handlers ---
 @router.callback_query(F.data.startswith("ch_toggle_req:"))
 async def toggle_required(callback: CallbackQuery):
     """
@@ -109,7 +106,6 @@ async def toggle_active(callback: CallbackQuery):
     await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     await callback.answer()
 
-
 @router.callback_query(F.data.startswith("ch_del:"))
 async def delete_ch(callback: CallbackQuery):
     """
@@ -124,7 +120,6 @@ async def delete_ch(callback: CallbackQuery):
     await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     await callback.answer()
 
-
 @router.callback_query(F.data == "ch_toggle_guard")
 async def toggle_guard(callback: CallbackQuery):
     """
@@ -138,9 +133,6 @@ async def toggle_guard(callback: CallbackQuery):
     await callback.message.edit_text(text, reply_markup=_channels_menu_kb(channels, guard_on), parse_mode="HTML")
     await callback.answer()
 
-
-# --- Add channel flow ---
-
 @router.callback_query(F.data == "ch_add_start")
 async def add_start(callback: CallbackQuery, state: FSMContext):
     """
@@ -153,7 +145,6 @@ async def add_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# Обработчик текстового сообщения для добавления канала
 @router.message(ChannelStates.waiting_for_username)
 async def process_channel_username(message: Message, state: FSMContext):
     """

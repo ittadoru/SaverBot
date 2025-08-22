@@ -1,9 +1,3 @@
-"""
-Модель тарифного плана и CRUD-операции для управления тарифами.
-Включает подробные docstring, type hints, __repr__ и безопасную обработку транзакций.
-"""
-
-
 from sqlalchemy import Column, Integer, String, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError

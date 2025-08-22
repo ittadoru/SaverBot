@@ -61,9 +61,9 @@ def _build_referral_text(ref_count: int, level: int, to_next: str, progress_bar:
     level_names = {
         1: "1 (базовый)",
         2: "2 (1 реферал)",
-        3: "3 (3 реферала, бонус)",
-        4: "4 (10 рефералов, VIP)",
-        5: "5 (30 рефералов, бессрочная подписка)"
+        3: "3 (3 реферала)",
+        4: "4 (10 рефералов)",
+        5: "5 (30 рефералов)"
     }
     return (
         f"\n\n<b>Реферальная программа:</b>\n"
@@ -87,7 +87,7 @@ async def show_profile(callback: CallbackQuery) -> None:
         total = await get_total_downloads(session, user_id)
         today = await get_daily_downloads(session, user_id)
         platform_stats = await get_platform_counts(session, user_id)
-        # --- Реферальная информация ---
+
         ref_count, level, _ = await get_referral_stats(session, user_id)
         # Новая логика перехода между уровнями
         next_level_map = {1: 2, 2: 3, 3: 4, 4: 5, 5: None}

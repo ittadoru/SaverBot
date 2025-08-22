@@ -1,15 +1,16 @@
-"""
-Учёт количества загрузок пользователей (дневной лимит и общий счётчик) в PostgreSQL.
-
-Таблицы:
-- daily_downloads: уникальная строка per (user_id, date) для дневного счётчика
-- total_downloads: общее число загрузок per user_id
-- user_download_links: последние ссылки пользователя (ограничено MAX_STORED_LINKS)
-"""
 from __future__ import annotations
 
 import datetime
-from sqlalchemy import Column, Integer, Date, BigInteger, PrimaryKeyConstraint, select, func, String, DateTime
+from sqlalchemy import (
+    Column, 
+    Integer, 
+    Date, 
+    BigInteger, 
+    PrimaryKeyConstraint, 
+    select, 
+    String, 
+    DateTime
+)
 import datetime as dt
 from sqlalchemy.ext.asyncio import AsyncSession
 

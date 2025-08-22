@@ -19,7 +19,7 @@ from utils.logger import get_logger, YTDlpLoggerAdapter
 from db.subscribers import is_subscriber as db_is_subscriber
 from db.base import get_session
 from .base import BaseDownloader
-from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID, MAX_FREE_VIDEO_MB
+from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID, DOWNLOAD_FILE_LIMIT
 
 
 logger = get_logger(__name__, platform="youtube")
@@ -151,57 +151,96 @@ class YTDLPDownloader(BaseDownloader):
         logger.info("⏬ [DOWNLOAD] start url=%s", url)
         loop = asyncio.get_running_loop()
 
-        # info = await self.get_video_info(url)
-        # logger.info(info)
-
-        # return None
-
         yt = YouTube(url)
-        # Лог всех доступных потоков
-        for stream in yt.streams:
-            logger.info(f"id={stream.itag} | type={stream.type} | res={stream.resolution} | ext={stream.mime_type} | progressive={stream.is_progressive} | filesize={stream.filesize}")
 
-        # Лучший mp4 progressive (со звуком)
-        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+        # Лучший mp4 progressive (со звуком) с приоритетом 360p/480p
+        stream = None
+        for res in ["480p", "360p"]:
+            stream = yt.streams.filter(progressive=True, file_extension='mp4', resolution=res).first()
+            if stream:
+                break
         if not stream:
-            raise Exception("No mp4 progressive stream found")
+            # Если нет 360p/480p, берём любой progressive mp4
+            stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
 
-        filesize_bytes = stream.filesize
-        filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
-        logger.info(f"[SIZE] video size: {filesize_mb:.2f} MB (bytes={filesize_bytes})")
+        if stream:
+            filesize_bytes = stream.filesize
+            filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
+            logger.info(f"[SIZE] video size: {filesize_mb:.2f} MB (bytes={filesize_bytes})")
 
-        is_sub = False
-        if user_id is not None and isinstance(user_id, int):
-            async with get_session() as session:
-                is_sub = await db_is_subscriber(session, user_id)
-        logger.info(f"[SUB_CHECK] user_id={user_id} is_sub={is_sub} (expire_at должен быть > now)")
-        if not is_sub and filesize_mb > MAX_FREE_VIDEO_MB:
-            logger.info(f"DENIED_SIZE: {filesize_mb:.2f} MB > {MAX_FREE_VIDEO_MB} MB (not subscriber)")
-            return ("DENIED_SIZE", f"{filesize_mb:.1f}")
+            is_sub = False
+            if user_id is not None and isinstance(user_id, int):
+                async with get_session() as session:
+                    is_sub = await db_is_subscriber(session, user_id)
+            if not is_sub and filesize_mb > DOWNLOAD_FILE_LIMIT:
+                return ("DENIED_SIZE", f"{filesize_mb:.1f}")
 
-        def run_download():
-            stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(filename))
+            def run_download():
+                stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(filename))
 
-        try:
-            await loop.run_in_executor(None, run_download)
-        except Exception as e:
-            import traceback
-            err = str(e)
-            logger.error("download failed err=%s", err)
-            logger.error(traceback.format_exc())
-            if message:
-                try:
-                    await message.bot.send_message(
-                        PRIMARY_ADMIN_ID,
-                        f"❗️Ошибка YouTube:\n<pre>{err}</pre>",
-                        parse_mode="HTML",
-                    )
-                except Exception:
-                    pass
-            raise
+            try:
+                await loop.run_in_executor(None, run_download)
+            except Exception as e:
+                import traceback
+                err = str(e)
+                logger.error("download failed err=%s", err)
+                logger.error(traceback.format_exc())
+                if message:
+                    try:
+                        await message.bot.send_message(
+                            PRIMARY_ADMIN_ID,
+                            f"❗️Ошибка YouTube:\n<pre>{err}</pre>",
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
+                raise
 
-        logger.info("✅ [DOWNLOAD] done file=%s", filename)
-        return filename
+            logger.info("✅ [DOWNLOAD] done file=%s", filename)
+            return filename
+        else:
+            # Нет progressive mp4 — fallback: ищем лучший video/mp4 и audio/mp4, объединяем
+            video_stream = None
+            for res in ["480p", "360p", "720p"]:
+                video_stream = yt.streams.filter(progressive=False, file_extension='mp4', type='video', resolution=res).first()
+                if video_stream:
+                    break
+            if not video_stream:
+                video_stream = yt.streams.filter(progressive=False, file_extension='mp4', type='video').order_by('resolution').desc().first()
+
+            audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').order_by('abr').desc().first()
+            if not video_stream or not audio_stream:
+                raise Exception("No suitable video/audio mp4 streams found for mux")
+            video_path = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}_video.mp4")
+            audio_path = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}_audio.m4a")
+            def run_download_video():
+                video_stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(video_path))
+            def run_download_audio():
+                audio_stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(audio_path))
+            await loop.run_in_executor(None, run_download_video)
+            await loop.run_in_executor(None, run_download_audio)
+            # Mux video+audio через ffmpeg
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-i", audio_path,
+                "-c:v", "copy",
+                "-c:a", "copy",
+                filename
+            ]
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.error(f"ffmpeg mux error: {stderr.decode()}")
+                raise Exception(f"ffmpeg mux error: {stderr.decode()}")
+            # Удаляем временные файлы
+            try:
+                os.remove(video_path)
+                os.remove(audio_path)
+            except Exception:
+                pass
+            logger.info("✅ [DOWNLOAD] muxed file=%s", filename)
+            return filename
 
     async def download_audio(self, url: str, user_id: int, message: types.Message | None = None) -> str:
         """
@@ -236,34 +275,3 @@ class YTDLPDownloader(BaseDownloader):
         logger.info("✅ [AUDIO] done file=%s", filename)
         return filename
     
-    async def get_video_info(self, url: str) -> dict:
-        """
-        Получить всю информацию о ролике: название, форматы, размеры, наличие аудио/видео, и т.д.
-        Возвращает dict с ключами: title, streams (list), length, author, etc.
-        """
-        loop = asyncio.get_running_loop()
-        def fetch():
-            yt = YouTube(url)
-            info = {
-                'title': yt.title,
-                'author': yt.author,
-                'length': yt.length,
-                'views': yt.views,
-                'description': yt.description,
-                'streams': []
-            }
-            for s in yt.streams:
-                info['streams'].append({
-                    'itag': s.itag,
-                    'type': s.type,
-                    'res': s.resolution,
-                    'mime_type': s.mime_type,
-                    'progressive': s.is_progressive,
-                    'abr': getattr(s, 'abr', None),
-                    'filesize': s.filesize,
-                    'video_codec': getattr(s, 'video_codec', None),
-                    'audio_codec': getattr(s, 'audio_codec', None),
-                    'url': s.url
-                })
-            return info
-        return await loop.run_in_executor(None, fetch)

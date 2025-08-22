@@ -1,9 +1,3 @@
-
-"""
-Учёт скачиваний по платформам (YouTube / TikTok / Instagram) в PostgreSQL.
-
-Таблица platform_downloads: количество скачиваний по каждой платформе для каждого пользователя.
-"""
 from __future__ import annotations
 
 from sqlalchemy import Column, Integer, BigInteger, String, PrimaryKeyConstraint, select

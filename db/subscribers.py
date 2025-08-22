@@ -1,8 +1,3 @@
-"""
-Модуль управления подписчиками и обработанными платежами.
-Включает модели, CRUD-функции, агрегированную статистику и idempotency для платежей.
-"""
-
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import (
     Column,

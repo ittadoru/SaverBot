@@ -1,9 +1,3 @@
-"""
-Модели пользователя и активности: регистрация/обновление, логирование, выборки и статистика.
-Включает подробные docstring, type hints, __repr__ и безопасную обработку транзакций.
-"""
-
-
 import datetime
 from typing import Optional
 
@@ -14,7 +8,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from db.base import Base
 from db.subscribers import Subscriber
-
 
 
 class User(Base):
@@ -179,7 +172,6 @@ async def mark_user_has_paid(session: AsyncSession, user_id: int) -> None:
     """
     now = datetime.datetime.now(datetime.timezone.utc)
     user = await session.get(User, user_id)
-    from sqlalchemy.exc import SQLAlchemyError
     try:
         if user:
             if not user.has_paid_ever:
@@ -218,9 +210,7 @@ async def get_user_ids_without_subscription(session: AsyncSession) -> list[int]:
     """
     Возвращает список ID пользователей, у которых нет активной подписки (нет подписки или истекла).
     """
-    from sqlalchemy import or_
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    now = datetime.now(datetime.timezone.utc)
     query = (
         select(User.id)
         .outerjoin(Subscriber, User.id == Subscriber.user_id)
