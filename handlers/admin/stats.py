@@ -16,8 +16,8 @@ from db.users import (
     get_new_users_count_for_period, get_total_users
 )
 
-router = Router()
 
+router = Router()
 
 @router.callback_query(F.data == "stats")
 async def handle_stats(callback: CallbackQuery) -> None:

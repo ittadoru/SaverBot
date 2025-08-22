@@ -5,7 +5,7 @@ import asyncio
 import time
 import yt_dlp
 from aiogram import types
-from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID
+from config import DOWNLOAD_DIR
 from utils.logger import get_logger, YTDlpLoggerAdapter
 
 logger = get_logger(__name__, platform="tiktok")
@@ -15,7 +15,7 @@ class TikTokDownloader(BaseDownloader):
     async def download(self, url: str, message: types.Message, user_id: int | None = None) -> str:
         """Скачивание видео с TikTok."""
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
-        logger.info("⏬ [DOWNLOAD] start url=%s", url)
+        logger.info("⬇️ [DOWNLOAD] start url=%s", url)
         loop = asyncio.get_running_loop()
 
         ydl_opts = {
@@ -50,21 +50,8 @@ class TikTokDownloader(BaseDownloader):
 
         try:
             await loop.run_in_executor(None, run_download_with_retries)
-        except Exception as e:  # noqa: BLE001
-            import traceback
-            err = str(e)
-            logger.error("download failed err=%s", err)
-            logger.error(traceback.format_exc())
-            if message:
-                try:
-                    await message.bot.send_message(
-                        PRIMARY_ADMIN_ID,
-                        f"❗️Ошибка TikTok:\n<pre>{err}</pre>",
-                        parse_mode="HTML",
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
-            raise
+        except Exception as e:
+            logger.error("download failed err=%s", str(e))
 
         logger.info("✅ [DOWNLOAD] done file=%s", filename)
         return filename

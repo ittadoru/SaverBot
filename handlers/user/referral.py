@@ -9,6 +9,7 @@ from aiogram.utils.markdown import hbold
 from db.users import get_ref_link, User
 from db.base import get_session
 from sqlalchemy import select, func
+from utils.keyboards import back_button
 
 
 router = Router()
@@ -22,7 +23,7 @@ async def send_invite_link(user_id: int, bot, message_or_callback):
         "Отправь эту ссылку друзьям — за каждого нового пользователя ты получишь приятный бонус!\n\n"
         f"{ref_link}"
     )
-    await message_or_callback.answer(text, parse_mode="HTML")
+    await message_or_callback.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
 
 @router.callback_query(lambda c: c.data == "invite_friend")
 async def invite_friend_callback(callback: CallbackQuery):
@@ -49,7 +50,7 @@ async def my_referrals(callback: CallbackQuery):
             ref_list += f"• {uname}\n"
         ref_list += f"\nВсего: {len(referrals)} чел."
         text = ref_list
-    await callback.message.answer(text, parse_mode="HTML")
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
 
 async def get_referral_stats(session, user_id: int):
     """

@@ -23,14 +23,23 @@ logger = logging.getLogger(__name__)
 router = Router()
 BUSY_KEY = "busy"
 
-
+async def strip_url_after_ampersand(url: str) -> str:
+    """
+    Возвращает url без аргументов после первого & (оставляет только до первого &).
+    Например: https://youtube.com/watch?v=abc&list=xyz -> https://youtube.com/watch?v=abc
+    """
+    if '&' in url:
+        return url.split('&', 1)[0]
+    return url
+    
 @router.message(F.text.regexp(r'https?://'))
 async def download_handler(message: types.Message, state: FSMContext):
     """Обрабатывает ссылку на скачивание, применяет лимиты и проверки."""
     url = message.text.strip()
     user = message.from_user
     platform = detect_platform(url)
-    
+    url = await strip_url_after_ampersand(url)
+
     # Проверка на параллельную загрузку
     data = await state.get_data()
     if data.get(BUSY_KEY, False):
@@ -87,23 +96,17 @@ async def download_handler(message: types.Message, state: FSMContext):
 
             unique_res = {}
             for fmt in info['formats']:
-                logger.info(fmt)
-
                 if fmt.get('mime_type') != 'video/mp4':
-                    logger.info(f"Пропускаем {fmt['mime_type']}")
                     continue
 
                 res_str = fmt.get('res')
                 if not res_str or not res_str.endswith('p'):
-                    logger.info(f"Пропускаем res: {res_str}")
                     continue
                 try:
                     res_int = int(res_str.replace('p',''))
                 except (ValueError, TypeError):
-                    logger.info(f"Не удалось распарсить res: {res_str}")
                     continue
                 if res_int < 240 or res_int > 1080:
-                    logger.info(f"Вне диапазона: {res_int}")
                     continue
                 if res_str not in unique_res or (fmt['progressive'] and not unique_res[res_str]['progressive']):
                     unique_res[res_str] = fmt
@@ -145,36 +148,49 @@ async def download_handler(message: types.Message, state: FSMContext):
             except Exception:
                 pass
 
-        except Exception:
-            await message.answer('Ошибка при формировании кнопок')
+        except Exception as e:
+            await message.answer('Ошибка, пожалуйста, попробуйте позже')
+            logger.error(f'❌ [DOWNLOAD] Ошибка при формировании кнопок: {e}', exc_info=True)
+
         await state.update_data({BUSY_KEY: False})
         return
     else:
         # Обычный пользователь YouTube — показать две кнопки: видео и аудио
         if platform == 'youtube':
-            wait_msg = await message.answer('⏳ Секунду...')
-            
-            kb = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text="📹 Скачать видео", callback_data=f"ytbasic:video:{url}")],
-                    [InlineKeyboardButton(text="🎧 Скачать аудио", callback_data=f"ytbasic:audio:{url}")]
-                ]
-            )
-            await message.answer(
-                "<b>🎬 Видео найдено!</b>\n\n"
-                "<i>Выберите нужный вариант:</i>",
-                reply_markup=kb,
-                parse_mode="HTML"
-            )
-            await state.update_data({"yt_url": url})
-            await state.update_data({BUSY_KEY: False})
+            try:
+                wait_msg = await message.answer('⏳ Секунду...')
 
-            await wait_msg.delete()
-            return
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="📹 Скачать видео", callback_data=f"ytbasic:video:{url}")],
+                        [InlineKeyboardButton(text="🎧 Скачать аудио", callback_data=f"ytbasic:audio:{url}")]
+                    ]
+                )
+                await message.answer(
+                    "<b>🎬 Видео найдено!</b>\n\n"
+                    "<i>Выберите нужный вариант:</i>",
+                    reply_markup=kb,
+                    parse_mode="HTML"
+                )
+                await state.update_data({"yt_url": url})
+                await state.update_data({BUSY_KEY: False})
+
+                await wait_msg.delete()
+                return
+            except Exception as e:
+                await message.answer('Ошибка, пожалуйста, проверьте позже')
+                logger.error(f'❌ [DOWNLOAD] Ошибка при формировании кнопок: {e}', exc_info=True)
+                await state.update_data({BUSY_KEY: False})
         else:
-            await message.answer('⏳ Скачиваем...')
-            await process_youtube_or_other(message, url, user.id, platform, state, 'video', level, sub)
-            return
+            try:
+                await message.answer('⏳ Скачиваем...')
+                await process_youtube_or_other(message, url, user.id, platform, state, 'video', level, sub)
+                await state.update_data({BUSY_KEY: False})
+                return
+            except Exception as e:
+                await message.answer('Ошибка, пожалуйста, попробуйте позже')
+                logger.error(f'❌ [DOWNLOAD] Ошибка при скачивании видео: {e}', exc_info=True)
+                await state.update_data({BUSY_KEY: False})
 
 @router.callback_query(lambda c: c.data.startswith('ytres:'))
 async def ytres_callback_handler(callback: types.CallbackQuery, state: FSMContext):
@@ -270,6 +286,7 @@ async def process_youtube_or_other(message, url, user_id, platform, state, mode,
                 file_path = result
                 w, h = get_video_resolution(file_path)
                 await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
+        
         else:
             # Скачивание с других платформ
             downloader = get_downloader(url)
@@ -282,10 +299,7 @@ async def process_youtube_or_other(message, url, user_id, platform, state, mode,
             await log_user_activity(session, user_id)
             await increment_platform_download(session, user_id, platform)
     except Exception as e:
-        logger.error(f'Ошибка при скачивании: {e}')
-        try:
-            await message.answer('❗️ Ошибка при скачивании, попробуйте позже.')
-        except Exception:
-            pass
+        logger.error(f'❌ [DOWNLOAD] Ошибка при скачивании: {e}')
+        await message.answer('❗️ Ошибка при скачивании, попробуйте позже.')
     finally:
         await state.update_data({BUSY_KEY: False})

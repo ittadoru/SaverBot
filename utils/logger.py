@@ -8,8 +8,6 @@ from logging.handlers import TimedRotatingFileHandler
 from aiogram import Bot
 from colorlog import ColoredFormatter
 
-from config import PRIMARY_ADMIN_ID
-
 
 class TelegramErrorHandler(logging.Handler):
     """Кастомный обработчик для отправки критических логов в Telegram."""
@@ -32,27 +30,6 @@ class TelegramErrorHandler(logging.Handler):
 
         if len(log_entry) > 4000:
             log_entry = log_entry[:4000] + "\n... (сообщение обрезано)"
-
-        try:
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(
-                    self.bot.send_message(
-                        chat_id=PRIMARY_ADMIN_ID,
-                        text=f"🆘 <b>Обнаружена ошибка:</b>\n\n<pre>{log_entry}</pre>",
-                        parse_mode="HTML"
-                    )
-                )
-                self.last_sent_time = current_time
-            except RuntimeError:
-                logging.getLogger(__name__).warning(
-                    "Не удалось отправить лог в Telegram: event loop не запущен."
-                )
-        except Exception as e:
-            logging.getLogger(__name__).exception(
-                f"Не удалось отправить лог ошибки в Telegram: {e}"
-            )
 
 class YTDlpLoggerAdapter:
     """Минимальный адаптер: убран вывод прогресса и процентов.

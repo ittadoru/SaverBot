@@ -64,7 +64,7 @@ def create_payment(
     # Подготовка входных данных
     desc = description.strip()
     if len(desc) > MAX_DESCRIPTION_LEN:
-        logger.debug("Описание платежа усечено с %d до %d", len(desc), MAX_DESCRIPTION_LEN)
+        logger.debug("✂️ [PAYMENT] Описание платежа усечено с %d до %d", len(desc), MAX_DESCRIPTION_LEN)
         desc = desc[:MAX_DESCRIPTION_LEN]
 
     bot_name = bot_username.lstrip('@') if bot_username else "bot"
@@ -106,15 +106,10 @@ def create_payment(
         "receipt": receipt_data,
     }
 
-    logger.debug(
-        "Создание платежа: user_id=%s amount=%s desc='%s' meta_keys=%s",
-        user_id, value_str, desc, list(meta.keys())
-    )
-
     payment = Payment.create(payload, idempotence_key)
 
     logger.info(
-        "Платеж создан: id=%s user=%s amount=%s capture=%s",
+        "💸 [PAYMENT] Платеж создан: id=%s user=%s amount=%s capture=%s",
         payment.id, user_id, value_str, capture
     )
     return PaymentResult(payment.confirmation.confirmation_url, payment.id)
@@ -126,5 +121,5 @@ def parse_webhook_notification(request_body: dict) -> WebhookNotification | None
         notification_object = WebhookNotification(request_body)
         return notification_object
     except Exception:  # noqa: BLE001
-        logger.debug("Невалидное webhook-уведомление: %s", request_body)
+        logger.debug("⚠️ [WEBHOOK] Невалидное webhook-уведомление: %s", request_body)
         return None

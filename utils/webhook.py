@@ -57,7 +57,7 @@ async def _notify_user_and_show_keys(user_id: int, bot: Bot, request: web.Reques
         await state.clear()
 
     except Exception:  # логируем только здесь, чтобы не терять stack
-        logger.exception("Не удалось обновить сообщение/очистить состояние user_id=%s", user_id)
+        logger.exception("❌ [EXCEPTION] Не удалось обновить сообщение/очистить состояние user_id=%s", user_id)
 
 async def _log_transaction(bot: Bot, user_id: int, tariff_name: str, tariff_price: float, support_chat_id: int) -> None:
     """Отправляет административный лог об оплате."""
@@ -73,46 +73,45 @@ async def _log_transaction(bot: Bot, user_id: int, tariff_name: str, tariff_pric
         text=text
     )
 
-    logger.info("Лог транзакции отправлен для пользователя %s. ✅", user_id)
-
-
 async def yookassa_webhook_handler(request: web.Request) -> web.Response:
     """Основной обработчик вебхуков YooKassa (успешная оплата -> продление подписки)."""
-    logger.info("WEBHOOK: start")
+    logger.info("🚀 [WEBHOOK] start")
+
     try:
         body = await request.json()
     except Exception:
-        logger.warning("WEBHOOK: invalid JSON")
+        logger.warning("⚠️ [WEBHOOK] invalid JSON")
         return web.Response(status=400)
+
 
     notification = payment.parse_webhook_notification(body)
     if not notification:
-        logger.warning("WEBHOOK: parse failed")
+        logger.warning("⚠️ [WEBHOOK] parse failed")
         return web.Response(status=400)
     if notification.event != EVENT_SUCCESS:
-        logger.info("WEBHOOK: unsupported event %s", notification.event)
+        logger.info("ℹ️ [WEBHOOK] unsupported event %s", notification.event)
         return web.Response(status=400)
+
 
     # --- Валидация metadata ---
     meta = getattr(notification.object, 'metadata', None) or {}
     if not all(k in meta for k in ("user_id", "tariff_id")):
-        logger.warning("WEBHOOK: missing metadata keys")
+        logger.warning("⚠️ [WEBHOOK] missing metadata keys")
         return web.Response(status=400)
     try:
         user_id = int(meta["user_id"])
         tariff_id = int(meta["tariff_id"])
     except (ValueError, TypeError):
-        logger.warning("WEBHOOK: invalid metadata values %s", meta)
+        logger.warning("⚠️ [WEBHOOK] invalid metadata values %s", meta)
         return web.Response(status=400)
+
 
     # --- Получаем тариф ---
     async with get_session() as session:
         tariff = await get_tariff_by_id(session, tariff_id)
     if not tariff:
-        logger.warning("WEBHOOK: tariff not found id=%s", tariff_id)
+        logger.warning("⚠️ [WEBHOOK] tariff not found id=%s", tariff_id)
         return web.Response(status=400)
-
-    logger.info("WEBHOOK: success payment user_id=%s tariff=%s", user_id, tariff_id)
 
     bot: Bot = request.app['bot']
     support_chat_id = request.app['config'].tg_bot.support_chat_id
@@ -121,5 +120,4 @@ async def yookassa_webhook_handler(request: web.Request) -> web.Response:
     await _log_transaction(bot, user_id, tariff.name, tariff.price, support_chat_id)
     await _notify_user_and_show_keys(user_id, bot, request, expiry)
 
-    logger.info("WEBHOOK: completed user_id=%s tariff=%s", user_id, tariff_id)
     return web.Response(status=200)

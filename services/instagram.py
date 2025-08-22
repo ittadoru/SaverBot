@@ -14,7 +14,7 @@ class InstagramDownloader(BaseDownloader):
     async def download(self, url: str, message, user_id: int | None = None) -> str | None:
         """Загрузка видео с Instagram с помощью yt-dlp. Возвращает путь к файлу или None при AGE_RESTRICTED."""
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
-        logger.info("⏬ [DOWNLOAD] start url=%s", url)
+        logger.info("⬇️ [DOWNLOAD] Начало скачивания: url=%s", url)
         loop = asyncio.get_running_loop()
 
         ydl_opts = {
@@ -48,11 +48,11 @@ class InstagramDownloader(BaseDownloader):
                 except yt_dlp.utils.DownloadError as e:  # noqa: PERF203
                     err_str = str(e)
                     if any(x in err_str.lower() for x in ("18 years old", "age-restricted", "login required", "restricted video")):
-                        logger.warning("AGE_RESTRICTED url=%s user=%s", url, username)
+                        logger.warning("⚠️ [DOWNLOAD] Ограничение по возрасту (AGE_RESTRICTED): url=%s user=%s", url, username)
                         return "AGE_RESTRICTED"
-                    logger.error("yt-dlp error attempt=%s/%s err=%s", attempt, max_attempts, e)
+                    logger.error("❌ [DOWNLOAD] yt-dlp ошибка attempt=%s/%s err=%s", attempt, max_attempts, e)
                 except Exception:  # noqa: BLE001
-                    logger.exception("unexpected error attempt=%s/%s", attempt, max_attempts)
+                    logger.exception("❌ [DOWNLOAD] Неожиданная ошибка attempt=%s/%s", attempt, max_attempts)
                 if attempt < max_attempts:
                     time.sleep(5)
                 else:
@@ -61,5 +61,5 @@ class InstagramDownloader(BaseDownloader):
         result = await loop.run_in_executor(None, run_download_with_retries)
         if result == "AGE_RESTRICTED":
             return None
-        logger.info("✅ [DOWNLOAD] done file=%s", filename)
+        logger.info("✅ [DOWNLOAD] Скачивание завершено: файл=%s", filename)
         return filename

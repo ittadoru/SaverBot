@@ -16,8 +16,8 @@ def detect_platform(url: str) -> str:
         if "www.instagram.com" in url:
             return "instagram"
 
-        logger.warning("[DETECT] Платформа не определена для URL: %s", url)
+        logger.warning("⚠️ [DETECT] Платформа не определена для URL: %s", url)
         return "unknown"
     except Exception as e:
-        logger.exception("Ошибка определения платформы для URL: %s", url)
+        logger.exception("❌ [EXCEPTION] Ошибка определения платформы для URL: %s", url)
         return "unknown"

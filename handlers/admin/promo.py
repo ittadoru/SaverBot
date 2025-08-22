@@ -14,8 +14,8 @@ from db.promocodes import (add_promocode, get_all_promocodes,
                            remove_all_promocodes, remove_promocode)
 from states.promo import PromoStates
 
-router = Router()
 
+router = Router()
 
 PROMOCODES_PER_PAGE = 20
 class PromoPageCallback(CallbackData, prefix="promo_page"):
@@ -90,7 +90,7 @@ async def process_add_promocode(message: types.Message, state: FSMContext) -> No
             await add_promocode(session, code, days, uses_left)
 
         logging.info(
-            f"Админ {message.from_user.id} добавил промокод: {code}, "
+            f"➕ [PROMO] Админ {message.from_user.id} добавил промокод: {code}, "
             f"{days} дн., {uses_left} исп."
         )
         await message.answer(
@@ -101,7 +101,7 @@ async def process_add_promocode(message: types.Message, state: FSMContext) -> No
         )
         await state.clear()
     else:
-        logging.warning(f"Ошибка формата промокода от {message.from_user.id}: {message.text}")
+        logging.warning(f"❗️ [PROMO] Ошибка формата промокода от {message.from_user.id}: {message.text}")
         await message.answer(
             "❗️ <b>Неверный формат промокода.</b>\n\n"
             "Пожалуйста, попробуйте ещё раз по примеру выше или нажмите <b>Назад</b> в меню.",
@@ -191,9 +191,10 @@ async def process_remove_promocode(message: types.Message, state: FSMContext) ->
     async with get_session() as session:
         success = await remove_promocode(session, code)
         if success:
-            logging.info(f"Админ {message.from_user.id} удалил промокод: {code}.")
+            logging.info(f"🗑️ [PROMO] Админ {message.from_user.id} удалил промокод: {code}.")
             text = f"✅ <b>Промокод <code>{code.upper()}</code> успешно удалён!</b>"
         else:
+            logging.warning(f"❗️ [PROMO] Не найден промокод для удаления: {code} (админ {message.from_user.id})")
             text = f"❗️ <b>Промокод <code>{code.upper()}</code> не найден.</b>"
 
     await message.answer(text, parse_mode="HTML")
@@ -253,7 +254,7 @@ async def confirm_remove_all_promocodes(callback: CallbackQuery) -> None:
     """
     async with get_session() as session:
         await remove_all_promocodes(session)
-        logging.warning(f"Админ {callback.from_user.id} удалил ВСЕ промокоды.")
+        logging.warning(f"🗑️ [PROMO] Админ {callback.from_user.id} удалил ВСЕ промокоды.")
 
     await callback.answer("✅ Все промокоды были успешно удалены!", show_alert=True)
     await show_promo_menu(callback)

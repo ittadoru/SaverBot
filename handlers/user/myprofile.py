@@ -4,7 +4,6 @@ from datetime import datetime
 import logging
 from aiogram import Router, types
 from aiogram.types import CallbackQuery
-from aiogram.exceptions import TelegramBadRequest
 from db.base import get_session
 from db.subscribers import get_subscriber_expiry
 from db.downloads import get_total_downloads, get_daily_downloads
@@ -13,10 +12,7 @@ from handlers.user.referral import get_referral_stats
 from config import DAILY_DOWNLOAD_LIMITS
 
 
-logger = logging.getLogger(__name__)
-
 router = Router()
-
 
 def _build_profile_keyboard() -> types.InlineKeyboardMarkup:
     """Возвращает клавиатуру профиля."""
@@ -80,7 +76,6 @@ async def show_profile(callback: CallbackQuery) -> None:
     user_id = callback.from_user.id
     name = callback.from_user.first_name or "Без имени"
     username = callback.from_user.username or ""
-    logger.debug("Открыт профиль пользователем user_id=%d", user_id)
 
     async with get_session() as session:
         expire_at = await get_subscriber_expiry(session, user_id)
@@ -124,22 +119,9 @@ async def show_profile(callback: CallbackQuery) -> None:
     current = (callback.message.text or "").strip()
     if current == text.strip():
         await callback.answer()
-        logger.debug("Профиль без изменений (user_id=%d)", user_id)
         return
 
-    try:
-        await callback.message.edit_text(
-            text, parse_mode="HTML", reply_markup=_build_profile_keyboard()
-        )
-    except TelegramBadRequest as e:
-        if "message is not modified" in str(e).lower():
-            await callback.answer()
-            logger.debug(
-                "Подавлена ошибка 'message is not modified' (user_id=%d)", user_id
-            )
-            return
-        logger.exception("Не удалось обновить профиль user_id=%d", user_id)
-        raise
-
+    await callback.message.edit_text(
+        text, parse_mode="HTML", reply_markup=_build_profile_keyboard()
+    )
     await callback.answer()
-    logger.info("Профиль показан user_id=%d", user_id)

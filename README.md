@@ -29,8 +29,8 @@
 В репозитории намеренно НЕТ файлов миграций в `alembic/versions/` (директория пуста), чтобы не тащить историю изменений. Схему можно создать автоматически.
 
 ```bash
-git clone https://github.com/ittadoru/BotTemplate.git
-cd BotTemplate
+git clone https://github.com/ittadoru/SaverBot.git
+cd SaverBot
 cp .env.example .env        # заполнить значения
 docker compose up -d --build
 docker compose logs -f app  # смотреть логи
@@ -49,7 +49,7 @@ docker compose down
 docker volume ls 
 # допустим volume называется pgdata
 docker volume rm pgdata
-docker compose run --rm app bash
+docker compose run --rm bot bash
 alembic revision --autogenerate -m "initial"
 exit
 docker compose up --build

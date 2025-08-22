@@ -15,8 +15,8 @@ from sqlalchemy import select
 import db
 from db.base import Base, get_session
 
+logger = logging.getLogger(__name__)
 router = Router()
-
 
 class TableExportCallback(CallbackData, prefix="export"):
     """Фабрика колбэков для экспорта таблиц."""
@@ -136,11 +136,12 @@ async def export_table_handler(callback: CallbackQuery, callback_data: TableExpo
             caption=f"📄 <b>Экспорт таблицы:</b> <code>{table_name}.csv</code>",
             parse_mode="HTML"
         )
+        logger.info(f"📤 [EXPORT] Таблица '{table_name}' экспортирована пользователю {callback.from_user.id}")
         await callback.answer("✅ Файл успешно отправлен!", show_alert=False)
         await aiofiles.os.remove(tmp_path)
 
     except Exception as e:
-        logging.error(f"Ошибка при экспорте таблицы {table_name}: {e}", exc_info=True)
+        logger.error(f"Ошибка при экспорте таблицы {table_name}: {e}", exc_info=True)
         await callback.answer(
             f"❌ <b>Произошла ошибка при экспорте таблицы <code>{table_name}</code>.</b>\nПроверьте логи.",
             show_alert=True

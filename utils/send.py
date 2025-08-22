@@ -35,7 +35,7 @@ async def send_video(
             link = f"{DOMAIN}/video/{file_name}"
             keyboard = types.InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [types.InlineKeyboardButton(text="⚙️ Скачать видео", url=link)]
+                    [types.InlineKeyboardButton(text="💾 Скачать видео", url=link)]
                 ]
             )
             # Определяем статус подписки
@@ -51,6 +51,7 @@ async def send_video(
             )
             # Время жизни файла: подписчику дольше
             delay = 900 if sub else 300
+            logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через {delay} секунд")
             asyncio.create_task(remove_file_later(file_path, delay=delay, message=message))
         else:
             me = await bot.get_me()
@@ -58,16 +59,17 @@ async def send_video(
             await bot.send_video(
                 chat_id=chat_id,
                 video=FSInputFile(file_path),
-                caption = f"💾 Скачивай видео с Tiktok | Instagram | YouTube \n\n@{me.username}",      
+                caption = f"🎬 Скачивай видео с Tiktok | Instagram | YouTube \n\n@{me.username}",      
                 width=width,
                 height=height,
                 supports_streaming=True,
             )
             # Удаляем файл спустя 10 секунд после отправки
+            logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")
             asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
-        logger.info("[SEND] Отправка завершена ✅")
+        logger.info("✅ [SEND] Отправка завершена")
     except Exception as e:
-        logger.error(f"[SEND] Ошибка при отправке видео: {e}")
+        logger.error(f"❌ [SEND] Ошибка при отправке видео: {e}")
         # Удаляем файл при ошибке
         try:
             await bot.send_message(chat_id, "❗️ Ошибка при отправке видео. Попробуйте позже.")
@@ -81,20 +83,20 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
     Отправляет аудио в чат с подписью.
     Файл удаляется через 10 секунд после отправки.
     """
-    logger.info("[SEND] Отправка в Telegram ✉️")
-    logger.info("Чат: %s", chat_id)
     try:
+        logger.info("✉️ [SEND] Отправка audio в Telegram")
         me = await bot.get_me()
         await bot.send_audio(
             chat_id=chat_id,
             audio=FSInputFile(file_path),
-            caption = f"💾 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}"
+            caption = f"🎵 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}"
         )
         # Удаляем файл спустя 10 секунд после отправки
+        logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
-        logger.info("[SEND] Отправка завершена ✅")
+        logger.info("✅ [SEND] Отправка завершена")
     except Exception as e:
-        logger.error(f"[SEND] Ошибка при отправке аудио: {e}")
+        logger.error(f"❌ [SEND] Ошибка при отправке аудио: {e}")
         try:
             await bot.send_message(chat_id, "❗️ Ошибка при отправке аудио. Попробуйте позже.")
         except Exception:

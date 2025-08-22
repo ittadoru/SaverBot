@@ -11,6 +11,6 @@ async def remove_file_later(path: str, delay: int, message=None):
         await asyncio.sleep(delay)
         if await asyncio.to_thread(os.path.exists, path):
             await aiofiles.os.remove(path)
-            logger.info("Файл удалён: %s 🗑", path)
+            logger.info("🗑️ [DELETE] Файл удалён: %s", path)
     except Exception:
-        logger.exception("remove_file_later %s", path)
+        logger.exception("❌ [DELETE] Ошибка при удалении файла %s", path)

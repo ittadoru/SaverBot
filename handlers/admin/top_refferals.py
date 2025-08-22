@@ -30,7 +30,6 @@ async def admin_top_referrals(callback: CallbackQuery) -> None:
 
         if not top:
             text = "Нет данных по рефералам."
-            logger.info("Админ %d открыл топ рефералов: данных нет.", admin_id)
         else:
             text = "<b>🏆 Топ-10 по рефералам:</b>\n\n"
             medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
@@ -41,7 +40,6 @@ async def admin_top_referrals(callback: CallbackQuery) -> None:
                     f"{medal} {uname} — <b>{u.ref_count}</b> рефералов | "
                     f"уровень <b>{u.level}</b>\n"
                 )
-            logger.info("Админ %d открыл топ рефералов (показано %d пользователей)", admin_id, len(top))
 
         try:
             await callback.message.edit_text(
@@ -49,13 +47,10 @@ async def admin_top_referrals(callback: CallbackQuery) -> None:
                 parse_mode="HTML",
                 reply_markup=markup.as_markup()
             )
-        except TelegramBadRequest as e:
-            if "message is not modified" in str(e).lower():
-                logger.debug("Топ рефералов: сообщение не изменено (user_id=%d)", admin_id)
-                await callback.answer()
-                return
-            logger.exception("Ошибка при выводе топа рефералов (user_id=%d)", admin_id)
-            raise
+        except Exception as e:
+            await callback.answer()
+            return
+
         await callback.answer()
     except Exception as e:
         logger.exception("Ошибка при обработке топа рефералов (user_id=%d): %s", admin_id, e)

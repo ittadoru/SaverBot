@@ -9,28 +9,26 @@ from __future__ import annotations
 
 import os
 import uuid
-import time
 import asyncio
 from pytubefix import YouTube
 from aiogram import types
-import yt_dlp
 
-from utils.logger import get_logger, YTDlpLoggerAdapter
+from utils.logger import get_logger
 from db.subscribers import is_subscriber as db_is_subscriber
 from db.base import get_session
 from .base import BaseDownloader
-from config import DOWNLOAD_DIR, PRIMARY_ADMIN_ID, DOWNLOAD_FILE_LIMIT
+from config import DOWNLOAD_DIR, DOWNLOAD_FILE_LIMIT
 
 
 logger = get_logger(__name__, platform="youtube")
 
 class YTDLPDownloader(BaseDownloader):
     async def download_by_itag(self, url: str, itag: int, message, user_id: int | None = None) -> str | tuple[str, str]:
+        logger.info("⬇️ [DOWNLOAD] Начало скачивания по itag=%s, url=%s", itag, url)
         """
         Скачивание видео по конкретному itag (mux если нужно).
         """
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
-        logger.info(f"⏬ [DOWNLOAD_BY_ITAG] start url={url} itag={itag}")
         loop = asyncio.get_running_loop()
         yt = YouTube(url)
         stream = yt.streams.get_by_itag(itag)
@@ -38,29 +36,14 @@ class YTDLPDownloader(BaseDownloader):
             raise Exception(f"No stream found for itag={itag}")
         # Если progressive — просто скачиваем
         if stream.is_progressive:
-            filesize_bytes = stream.filesize
-            filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
-            logger.info(f"[SIZE] video size: {filesize_mb:.2f} MB (bytes={filesize_bytes})")
             def run_download():
                 stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(filename))
             try:
                 await loop.run_in_executor(None, run_download)
             except Exception as e:
-                import traceback
-                err = str(e)
-                logger.error("download_by_itag failed err=%s", err)
-                logger.error(traceback.format_exc())
-                if message:
-                    try:
-                        await message.bot.send_message(
-                            PRIMARY_ADMIN_ID,
-                            f"❗️Ошибка YouTube (by itag):\n<pre>{err}</pre>",
-                            parse_mode="HTML",
-                        )
-                    except Exception:
-                        pass
-                raise
-            logger.info("✅ [DOWNLOAD_BY_ITAG] done file=%s", filename)
+                logger.error("❌ [DOWNLOAD] Ошибка при скачивании видео по тегу: %s", str(e))
+
+            logger.info("✅ [DOWNLOAD] Скачивание успешно: файл=%s", filename)
             return filename
         # Если не progressive — mux video+audio
         else:
@@ -88,11 +71,11 @@ class YTDLPDownloader(BaseDownloader):
                 filename
             ]
 
-            logger.info(f"[MUX] ffmpeg cmd: {' '.join(cmd)}")
+            logger.info(f"🎛️ [MUX] ffmpeg команда: {' '.join(cmd)}")
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
-                logger.error(f"ffmpeg mux error: {stderr.decode()}")
+                logger.error(f"❌ [MUX] Ошибка ffmpeg mux: {stderr.decode()}")
                 raise Exception(f"ffmpeg mux error: {stderr.decode()}")
             # Удаляем временные файлы
             try:
@@ -100,7 +83,7 @@ class YTDLPDownloader(BaseDownloader):
                 os.remove(audio_path)
             except Exception:
                 pass
-            logger.info("✅ [DOWNLOAD_BY_ITAG] muxed file=%s", filename)
+            logger.info("✅ [DOWNLOAD] Скачивание успешно: файл=%s", filename)
             return filename
 
     async def get_available_video_options(self, url: str, max_filesize_mb: int = 1024) -> dict:
@@ -144,11 +127,11 @@ class YTDLPDownloader(BaseDownloader):
     
 
     async def download(self, url: str, message, user_id: int | None = None) -> str | tuple[str, str]:
+        logger.info("⬇️ [DOWNLOAD] Начало скачивания лучшего mp4, url=%s", url)
         """
         Скачивание лучшего mp4 (progressive, со звуком) через pytubefix.
         """
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
-        logger.info("⏬ [DOWNLOAD] start url=%s", url)
         loop = asyncio.get_running_loop()
 
         yt = YouTube(url)
@@ -166,7 +149,6 @@ class YTDLPDownloader(BaseDownloader):
         if stream:
             filesize_bytes = stream.filesize
             filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
-            logger.info(f"[SIZE] video size: {filesize_mb:.2f} MB (bytes={filesize_bytes})")
 
             is_sub = False
             if user_id is not None and isinstance(user_id, int):
@@ -181,22 +163,10 @@ class YTDLPDownloader(BaseDownloader):
             try:
                 await loop.run_in_executor(None, run_download)
             except Exception as e:
-                import traceback
                 err = str(e)
-                logger.error("download failed err=%s", err)
-                logger.error(traceback.format_exc())
-                if message:
-                    try:
-                        await message.bot.send_message(
-                            PRIMARY_ADMIN_ID,
-                            f"❗️Ошибка YouTube:\n<pre>{err}</pre>",
-                            parse_mode="HTML",
-                        )
-                    except Exception:
-                        pass
-                raise
+                logger.error("❌ [DOWNLOAD] Ошибка при скачивании: %s", err)
 
-            logger.info("✅ [DOWNLOAD] done file=%s", filename)
+            logger.info("✅ [DOWNLOAD] Готово: файл=%s", filename)
             return filename
         else:
             # Нет progressive mp4 — fallback: ищем лучший video/mp4 и audio/mp4, объединяем
@@ -231,7 +201,7 @@ class YTDLPDownloader(BaseDownloader):
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
-                logger.error(f"ffmpeg mux error: {stderr.decode()}")
+                logger.error(f"❌ [MUX] Ошибка ffmpeg mux: {stderr.decode()}")
                 raise Exception(f"ffmpeg mux error: {stderr.decode()}")
             # Удаляем временные файлы
             try:
@@ -239,16 +209,16 @@ class YTDLPDownloader(BaseDownloader):
                 os.remove(audio_path)
             except Exception:
                 pass
-            logger.info("✅ [DOWNLOAD] muxed file=%s", filename)
+            logger.info("✅ [MUX] MUX завершён: файл=%s", filename)
             return filename
 
-    async def download_audio(self, url: str, user_id: int, message: types.Message | None = None) -> str:
+    async def download_audio(self, url: str) -> str:
+        logger.info("⬇️ [AUDIO] Начало скачивания аудио, url=%s", url)
         """
         Скачивает лучший аудиопоток (m4a/mp4) через pytubefix, без конвертации в mp3.
         Возвращает путь к скачанному m4a-файлу.
         """
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.m4a")
-        logger.info("⏬ [AUDIO] start url=%s user_id=%s", url, user_id)
         loop = asyncio.get_running_loop()
         def run_download():
             yt = YouTube(url)
@@ -260,18 +230,8 @@ class YTDLPDownloader(BaseDownloader):
         try:
             await loop.run_in_executor(None, run_download)
         except Exception as e:
-            import traceback
-            err = str(e)
-            logger.error("audio failed err=%s", err)
-            logger.error(traceback.format_exc())
-            if message:
-                await message.bot.send_message(
-                    PRIMARY_ADMIN_ID,
-                    f"❗️Ошибка аудио:\n<pre>{err}</pre>",
-                    parse_mode="HTML",
-                )
-            raise
+            logger.error("❌ [AUDIO] Ошибка при скачивании аудио: %s", str(e))
 
-        logger.info("✅ [AUDIO] done file=%s", filename)
+        logger.info("✅ [AUDIO] Готово: файл=%s", filename)
         return filename
     

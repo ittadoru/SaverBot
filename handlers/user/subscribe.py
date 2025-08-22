@@ -17,14 +17,13 @@ router = Router()
 BUY_PREFIX = "buy_tariff:"
 PARSE_MODE = "HTML"
 SUBSCRIBE_HEADER = (
-    "<b>💎 Преимущества подписки:</b>\n"
+    "<b>💎 Преимущества подписки:</b>\n\n"
     "• 50 скачиваний в сутки\n"
     "• Лимит размера файлов в 7 раз выше\n"
     "• Ссылки на скачивание живут дольше\n"
     "• Нет рекламы\n"
     "• Не требуется подписка на каналы\n"
-    "• Доступно любое качество YouTube и аудио\n"
-    "• Приоритетная поддержка\n\n"
+    "• Доступно любое качество YouTube и аудио\n\n"
     "Выберите вариант подписки:"
 )
 
@@ -49,9 +48,9 @@ async def subscribe_handler_callback(callback: types.CallbackQuery) -> None:
 
 @router.message(F.text == "/subscribe")
 async def subscribe_handler_command(message: types.Message) -> None:
-    await _show_subscribe_menu(message)
+    await _show_subscribe_menu(message, is_command=True)
 
-async def _show_subscribe_menu(message: types.Message, callback: types.CallbackQuery = None) -> None:
+async def _show_subscribe_menu(message: types.Message, callback: types.CallbackQuery = None, is_command=False) -> None:
     """Показывает список тарифов или сообщение об их отсутствии."""
     async with get_session() as session:
         tariffs = await get_all_tariffs(session)
@@ -67,7 +66,7 @@ async def _show_subscribe_menu(message: types.Message, callback: types.CallbackQ
         return
 
     new_text = SUBSCRIBE_HEADER
-    if isinstance(message, types.Message):
+    if is_command:
         send = message.answer
     else:
         send = message.edit_text
@@ -111,16 +110,15 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
             }
         )
         logger.info(
-            "Создан платёж %s для user=%s tariff=%s price=%s", payment_id, user_id, tariff.id, tariff.price
+            "💸 [SUBSCRIBE] Создан платёж %s для user=%s tariff=%s price=%s", payment_id, user_id, tariff.id, tariff.price
         )
     except Exception as e:
-        logger.exception("Ошибка создания платежа для user=%s tariff=%s", user_id, tariff_id)
-        await callback.answer("Ошибка создания платежа. Попробуйте позже.", show_alert=True)
+        logger.exception("❌ [SUBSCRIBE] Ошибка создания платежа для user=%s tariff=%s", user_id, tariff_id)
+        await callback.message.answer("Ошибка создания платежа. Попробуйте позже.", show_alert=True)
         return
 
     markup = InlineKeyboardBuilder()
-    markup.button(text="🪙 Оплатить", url=payment_url)
-    markup.button(text="⬅️ Назад", callback_data="subscribe")
+    markup.button(text="💸 Оплатить", url=payment_url)
     markup.adjust(1)
 
     with suppress(TelegramAPIError):

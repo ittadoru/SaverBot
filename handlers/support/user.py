@@ -14,17 +14,15 @@ from db.users import add_or_update_user
 from sqlalchemy import select
 from states.support import Support
 
+
 logger = logging.getLogger(__name__)
 
 router = Router()
-
 
 cancel_kb = InlineKeyboardMarkup(
     inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_support")]]
 )
 
-
-from aiogram.types import CallbackQuery, Message
 
 @router.callback_query(F.data == "help")
 @router.message(F.text.lower() == "/help")
@@ -157,9 +155,9 @@ async def create_ticket_handler(message: Message, state: FSMContext) -> None:
             "Чтобы завершить диалог, отправьте команду /stop."
         )
         await state.set_state(Support.in_dialog)
-        logger.info("Пользователь %d в теме %d (reuse/create)", user.id, topic_id)
+        logger.info("📩 [SUPPORT] Пользователь %d создал тикет в теме %d (reuse/create)", user.id, topic_id)
     except Exception as e:
-        logger.error("Не удалось обработать тикет пользователя %d: %s", user.id, e)
+        logger.error("❌ [SUPPORT] Не удалось обработать тикет пользователя %d: %s", user.id, e)
         await message.answer("❗️ Ошибка при обработке обращения. Попробуйте позже.")
 
 
@@ -202,11 +200,11 @@ async def close_ticket_by_user_handler(event, state: FSMContext) -> None:
             )
         except Exception as e:
             logger.error(
-                "Не удалось уведомить группу поддержки о закрытии тикета %d: %s",
+                "❌ [SUPPORT] Не удалось уведомить группу поддержки о закрытии тикета %d: %s",
                 ticket.topic_id,
                 e,
             )
-        logger.info("Пользователь %d закрыл свой тикет.", user_id)
+        logger.info("✅ [SUPPORT] Пользователь %d закрыл свой тикет (тема %d)", user_id, ticket.topic_id)
 
 
 @router.message(Support.in_dialog)
@@ -225,14 +223,9 @@ async def forward_to_support_handler(message: Message) -> None:
             await message.copy_to(
                 chat_id=SUPPORT_GROUP_ID, message_thread_id=ticket.topic_id
             )
-            logger.info(
-                "Пользователь %d отправил сообщение в тикет %d",
-                user_id,
-                ticket.topic_id,
-            )
         except Exception as e:
             logger.error(
-                "Не удалось переслать сообщение от пользователя %d в тикет %d: %s",
+                "❌ [SUPPORT] Не удалось переслать сообщение от пользователя %d в тикет %d: %s",
                 user_id,
                 ticket.topic_id,
                 e,

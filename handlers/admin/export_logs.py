@@ -9,14 +9,14 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-LOG_DIR = "logs"
-
 
 class LogCallback(CallbackData, prefix="log_select"):
     """Фабрика колбэков для выбора конкретного файла лога."""
     filename: str
 
 
+LOG_DIR = "logs"
+logger = logging.getLogger(__name__)
 router = Router()
 
 async def get_current_log():
@@ -96,18 +96,12 @@ async def send_log_file(callback: CallbackQuery, callback_data: LogCallback):
     log_path = os.path.join(LOG_DIR, filename)
     user_id = callback.from_user.id
 
-    if not await asyncio.to_thread(os.path.exists, log_path):
-        logging.warning(f"Админ {user_id} запросил несуществующий лог: {filename}")
-        await callback.answer(f"❗️ Файл <b>{filename}</b> не найден.", show_alert=True, parse_mode="HTML")
-        return
-
     if await asyncio.to_thread(os.path.getsize, log_path) == 0:
-        logging.info(f"Админ {user_id} запросил пустой лог: {filename}")
+        logger.info(f"⚠️ [EXPORT] Админ {user_id} запросил пустой лог: {filename}")
         await callback.answer(f"⚠️ Файл <b>{filename}</b> пуст.", show_alert=True, parse_mode="HTML")
         return
 
-    logging.info(f"Админ {user_id} запросил лог: {filename}")
-
     file = FSInputFile(log_path)
     await callback.message.answer_document(file, caption=f"📄 Ваш лог: <code>{filename}</code>", parse_mode="HTML")
+    logger.info(f"✅ [EXPORT] Лог {filename} отправлен админу {user_id}")
     await callback.answer()

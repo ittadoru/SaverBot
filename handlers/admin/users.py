@@ -84,7 +84,6 @@ async def list_users_handler(callback: types.CallbackQuery) -> None:
         await callback.message.edit_text(
             text, parse_mode="HTML", reply_markup=builder
         )
-    logger.info("Администратор %d запросил список пользователей.", callback.from_user.id)
     await callback.answer()
 
 @router.callback_query(UsersPageCallback.filter())
@@ -98,11 +97,6 @@ async def paginate_users_handler(callback: types.CallbackQuery, callback_data: U
         await callback.message.edit_text(
             text, parse_mode="HTML", reply_markup=builder.as_markup()
         )
-    logger.info(
-        "Администратор %d переключил страницу пользователей на %d.",
-        callback.from_user.id,
-        page,
-    )
     await callback.answer()
 
 @router.callback_query(F.data == "delete_all_users")
@@ -142,7 +136,7 @@ async def delete_all_users_handler(callback: types.CallbackQuery, callback_data:
             await delete_user_by_id(session, uid)
 
     logger.warning(
-        "Администратор %d удалил ВСЕХ пользователей.", callback.from_user.id
+        "❌ [ADMIN] Администратор %d удалил ВСЕХ пользователей.", callback.from_user.id
     )
     await callback.answer("✅ <b>Все пользователи были успешно удалены!</b>", show_alert=True)
     await callback.message.delete()

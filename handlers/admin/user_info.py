@@ -18,6 +18,8 @@ from db.users import User
 from states.history import HistoryStates
 
 
+logger = logging.getLogger(__name__)
+
 router = Router()
 router.message.filter(F.from_user.id.in_(ADMINS))
 router.callback_query.filter(F.from_user.id.in_(ADMINS))
@@ -150,12 +152,12 @@ async def delete_user_handler(
     builder.adjust(1)
 
     if success:
-        logging.info(
+        logger.info(
             "Администратор %d удалил пользователя %d", admin_id, user_id_to_delete
         )
         text = f"✅ <b>Пользователь <code>{user_id_to_delete}</code> успешно удалён!</b>\n\nВыберите действие:"
     else:
-        logging.warning(
+        logger.warning(
             "Администратор %d не смог удалить несуществующего пользователя %d",
             admin_id,
             user_id_to_delete,

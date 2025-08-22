@@ -182,7 +182,7 @@ async def _send_task(bot: Bot, admin_id: int, data: dict):
         await bot.send_message(admin_id, "❗️ Аудитория пуста. Сообщение никому не отправлено.")
         return
     total = len(user_ids)
-    logger.info(f"Начинается рассылка 'ad_broadcast' для {total} пользователей.")
+    logger.info("💸 [AD-BROADCAST] Начинается рассылка для %s пользователей.", total)
     progress_msg = await bot.send_message(admin_id, _render_progress_bar(0, total))
     last_update = asyncio.get_event_loop().time()
     for user_id in user_ids:
@@ -196,10 +196,10 @@ async def _send_task(bot: Bot, admin_id: int, data: dict):
             sent += 1
         except TelegramAPIError as e:
             error_text = str(e)
-            logger.info("TelegramAPIError (%s)", error_text)
+            logger.info("🚫 [AD-BROADCAST] TelegramAPIError: %s", error_text)
             failed += 1
         except Exception as e:
-            logger.error("Неизвестная ошибка при отправке пользователю %s: %s", user_id, e, exc_info=True)
+            logger.error("🚫 [AD-BROADCAST] Неизвестная ошибка при отправке пользователю %s: %s", user_id, e, exc_info=True)
             failed += 1
         now = asyncio.get_event_loop().time()
         if (sent % 100 == 0 or sent == total) or (now - last_update > BROADCAST_PROGRESS_UPDATE_INTERVAL):
@@ -212,7 +212,7 @@ async def _send_task(bot: Bot, admin_id: int, data: dict):
             last_update = now
         await asyncio.sleep(BROADCAST_PER_MESSAGE_DELAY)
 
-    logger.info("Рассылка 'ad_broadcast' завершена. Отправлено=%s Ошибок=%s", sent, failed)
+    logger.info("✅ [AD-BROADCAST] Рассылка завершена. Отправлено=%s Ошибок=%s", sent, failed)
 
     percent = int(sent / total * 100) if total else 0
     summary_text = (
