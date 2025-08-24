@@ -3,7 +3,6 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 import aiogram.utils.markdown as markdown
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
 from utils.platform_detect import detect_platform
 from utils.video_utils import get_video_resolution
 from utils.send import send_video, send_audio
@@ -77,60 +76,89 @@ async def download_handler(message: types.Message, state: FSMContext):
             await state.update_data({BUSY_KEY: False})
             return
 
-    # Обработка YouTube для подписчиков: выбор качества и аудио
-    if platform == 'youtube' and sub:
+    # Универсальная обработка YouTube для всех пользователей
+    if platform == 'youtube':
         try:
             wait_msg = await message.answer('⏳ Секунду...')
             downloader = YTDLPDownloader()
-            
             max_filesize_mb = await get_max_filesize_mb(level, sub)
-
-            info = await downloader.get_available_video_options(url, max_filesize_mb=max_filesize_mb) 
-            text = (
-                f"<b>🎬 {info['title']}</b>\n"
-                f"\n"
-                f"<i>Выберите разрешение для скачивания видео или получите только аудио:</i>\n"
-                f"\n"
-                f"<b>📥 Доступные разрешения:</b>"
-            )
-
+            info = await downloader.get_available_video_options(url)
+            preview = info['thumbnail_url']
+            
+            # --- Формируем список разрешений и доступность ---
             unique_res = {}
             for fmt in info['formats']:
-                if fmt.get('mime_type') != 'video/mp4':
-                    continue
-
-                res_str = fmt.get('res')
-                if not res_str or not res_str.endswith('p'):
-                    continue
-                try:
-                    res_int = int(res_str.replace('p',''))
-                except (ValueError, TypeError):
-                    continue
-                if res_int < 240 or res_int > 1080:
-                    continue
-                if res_str not in unique_res or (fmt['progressive'] and not unique_res[res_str]['progressive']):
-                    unique_res[res_str] = fmt
+                if fmt.get('mime_type') == 'video/mp4':
+                    res_str = fmt.get('res')
+                    if res_str and res_str.endswith('p'):
+                        try:
+                            res_int = int(res_str.replace('p',''))
+                            if 240 <= res_int <= 1080:
+                                # приоритет progressive=True
+                                if res_str not in unique_res or (fmt.get('progressive') and not unique_res[res_str].get('progressive')):
+                                    unique_res[res_str] = fmt
+                        except (ValueError, TypeError):
+                            continue
 
             sorted_res = sorted(unique_res.items(), key=lambda x: int(x[0].replace('p','')))
+            # Определяем максимальное разрешение
+            max_res = max([int(r.replace('p','')) for r, _ in sorted_res], default=0)
 
+            # --- Логика доступа ---
+            def is_free(res):
+                res_int = int(res.replace('p',''))
+                if max_res >= 720:
+                    return res_int in (240, 360, 480)
+                elif max_res == 480:
+                    return res_int in (240, 360)
+                elif max_res == 360:
+                    return res_int == 240
+                else:
+                    return False
+
+            # --- Формируем текст с весом и смайликами ---
+            lines = [f"<b>🎬 {info['title']}</b>\n"]
+            lines.append("Приблизительные размеры:")
+            for res, fmt in sorted_res:
+                size_mb = fmt.get('size_mb') or (fmt.get('filesize', 0) / 1024 / 1024)
+                size_str = f"{size_mb:.0f}MB" if size_mb else "?MB"
+                if size_mb and max_filesize_mb and size_mb > max_filesize_mb:
+                    emoji = '🔒'
+                elif sub or is_free(res):
+                    emoji = '⚡️'
+                else:
+                    emoji = '🔒'
+                lines.append(f"{emoji}  {res}:  {size_str}")
+            lines.append("")
+            lines.append("<i>Выберите разрешение для скачивания видео или получите только аудио:</i>")
+            
+            # --- Клавиатура ---
             rows = []
             row = []
             for res, fmt in sorted_res:
-                row.append(
-                    InlineKeyboardButton(
-                        text=res,
-                        callback_data=f"ytres:{fmt['itag']}"
-                    )
-                )
+                size_mb = fmt.get('size_mb') or (fmt.get('filesize', 0) / 1024 / 1024)
+                # Если разрешение не free и нет подписки — всегда замок и ytlocked:sub
+                if not (sub or is_free(res)):
+                    emoji = '🔒'
+                    cb = f"ytlocked:sub:{res}"
+                # Если разрешение free или есть подписка — проверяем размер
+                elif size_mb is not None and size_mb > max_filesize_mb:
+                    emoji = '🔒'
+                    cb = f"ytlocked:file:{res}"
+                else:
+                    emoji = '⚡️'
+                    cb = f"ytres:{fmt['itag']}"
+                row.append(InlineKeyboardButton(text=f"{emoji} {res}", callback_data=cb))
                 if len(row) == 2:
                     rows.append(row)
                     row = []
+
             if row:
                 rows.append(row)
-
+            # Аудио всегда доступно
             rows.append([
                 InlineKeyboardButton(
-                    text="🎧 Скачать аудио",
+                    text="🎧 Аудио",
                     callback_data=f"ytdl:audio:{url}"
                 )
             ])
@@ -138,8 +166,8 @@ async def download_handler(message: types.Message, state: FSMContext):
 
             await state.update_data({"yt_url": url})
             await message.answer_photo(
-                photo=info['thumbnail_url'],
-                caption=text,
+                photo=preview,
+                caption='\n'.join(lines),
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
@@ -147,50 +175,11 @@ async def download_handler(message: types.Message, state: FSMContext):
                 await wait_msg.delete()
             except Exception:
                 pass
-
         except Exception as e:
             await message.answer('Ошибка, пожалуйста, попробуйте позже')
             logger.error(f'❌ [DOWNLOAD] Ошибка при формировании кнопок: {e}', exc_info=True)
-
         await state.update_data({BUSY_KEY: False})
         return
-    else:
-        # Обычный пользователь YouTube — показать две кнопки: видео и аудио
-        if platform == 'youtube':
-            try:
-                wait_msg = await message.answer('⏳ Секунду...')
-
-                kb = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="📹 Скачать видео", callback_data=f"ytbasic:video:{url}")],
-                        [InlineKeyboardButton(text="🎧 Скачать аудио", callback_data=f"ytbasic:audio:{url}")]
-                    ]
-                )
-                await message.answer(
-                    "<b>🎬 Видео найдено!</b>\n\n"
-                    "<i>Выберите нужный вариант:</i>",
-                    reply_markup=kb,
-                    parse_mode="HTML"
-                )
-                await state.update_data({"yt_url": url})
-                await state.update_data({BUSY_KEY: False})
-
-                await wait_msg.delete()
-                return
-            except Exception as e:
-                await message.answer('Ошибка, пожалуйста, проверьте позже')
-                logger.error(f'❌ [DOWNLOAD] Ошибка при формировании кнопок: {e}', exc_info=True)
-                await state.update_data({BUSY_KEY: False})
-        else:
-            try:
-                await message.answer('⏳ Скачиваем...')
-                await process_youtube_or_other(message, url, user.id, platform, state, 'video', level, sub)
-                await state.update_data({BUSY_KEY: False})
-                return
-            except Exception as e:
-                await message.answer('Ошибка, пожалуйста, попробуйте позже')
-                logger.error(f'❌ [DOWNLOAD] Ошибка при скачивании видео: {e}', exc_info=True)
-                await state.update_data({BUSY_KEY: False})
 
 @router.callback_query(lambda c: c.data.startswith('ytres:'))
 async def ytres_callback_handler(callback: types.CallbackQuery, state: FSMContext):
@@ -209,6 +198,25 @@ async def ytres_callback_handler(callback: types.CallbackQuery, state: FSMContex
 
     await process_youtube_or_other(callback.message, url, user.id, 'youtube', state, itag, level, sub)
 
+@router.callback_query(lambda c: c.data.startswith('ytlocked:'))
+async def ytlocked_callback_handler(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Показывает причину блокировки: file — превышен лимит размера, sub — нужна подписка.
+    """
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Оформить подписку", callback_data="subscribe")]
+    ])
+    parts = callback.data.split(':', 2)
+    reason = parts[1] if len(parts) > 1 else 'sub'
+    if reason == 'file':
+        text = ('🔒 Данное разрешение недоступно, так как файл слишком большой для вас.\n\n'
+                'Повысьте реферальный уровень или оформите подписку для увеличения лимита.')
+    else:
+        text = ('🔒 Доступ к этому формату разрешения ограничен.\n\n'
+                'Приобретите подписку, чтобы разблокировать.')
+    await callback.message.answer(text, reply_markup=kb)
+    await callback.answer()
+
 @router.callback_query(lambda c: c.data.startswith('ytdl:'))
 async def ytdl_callback_handler(callback: types.CallbackQuery, state: FSMContext):
     """Обрабатывает скачивание только аудио с YouTube."""
@@ -221,36 +229,16 @@ async def ytdl_callback_handler(callback: types.CallbackQuery, state: FSMContext
         _, level, _ = await get_referral_stats(session, user.id)
     await process_youtube_or_other(callback.message, url, user.id, 'youtube', state, mode, level, True)
 
-
-# --- Новый обработчик для обычных пользователей YouTube ---
-@router.callback_query(lambda c: c.data.startswith('ytbasic:'))
-async def ytbasic_callback_handler(callback: types.CallbackQuery, state: FSMContext):
-    """Обрабатывает кнопки 'Скачать видео' и 'Скачать аудио' для обычных пользователей YouTube."""
-    _, mode, url = callback.data.split(':', 2)
-    user = callback.from_user
-    await state.update_data({BUSY_KEY: True})
-
-    async with get_session() as session:
-        _, level, _ = await get_referral_stats(session, user.id)
-
-    if mode == 'video':
-        await callback.message.answer('⏳ Скачиваем видео, подождите пару минут...')
-        await process_youtube_or_other(callback.message, url, user.id, 'youtube', state, 'video', level, False)
-    elif mode == 'audio':
-        await callback.message.answer('⏳ Скачиваем аудио...')
-        await process_youtube_or_other(callback.message, url, user.id, 'youtube', state, 'audio', level, False)
-    else:
-        await callback.answer('Неизвестный режим', show_alert=True)
-        await state.update_data({BUSY_KEY: False})
-
 async def get_max_filesize_mb(level, sub):
     # Определение максимального размера файла в зависимости от уровня и подписки
     if level == 1:
         max_filesize_mb = DOWNLOAD_FILE_LIMIT
     elif level == 2:
         max_filesize_mb = DOWNLOAD_FILE_LIMIT * 3
-    elif level >= 3 or sub:
-        max_filesize_mb = DOWNLOAD_FILE_LIMIT * 7
+    elif level == 3:
+        max_filesize_mb = DOWNLOAD_FILE_LIMIT * 5
+    else:
+        max_filesize_mb = DOWNLOAD_FILE_LIMIT * 10
     return max_filesize_mb
 
 async def process_youtube_or_other(message, url, user_id, platform, state, mode, level, sub):
@@ -262,7 +250,7 @@ async def process_youtube_or_other(message, url, user_id, platform, state, mode,
             max_filesize_mb = await get_max_filesize_mb(level, sub)
 
             if mode == 'audio':
-                file_path = await downloader.download_audio(url, user_id, message)
+                file_path = await downloader.download_audio(url)
                 await send_audio(message.bot, message, message.chat.id, file_path)
             
             elif mode.isdigit():

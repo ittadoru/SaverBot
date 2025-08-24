@@ -28,7 +28,7 @@ async def send_video(
     """
  
     file_size = await asyncio.to_thread(os.path.getsize, file_path)
-    TELEGRAM_LIMIT_MB = 40
+    TELEGRAM_LIMIT_MB = 48
     try:
         if file_size > TELEGRAM_LIMIT_MB * 1024 * 1024:
             file_name = await asyncio.to_thread(os.path.basename, file_path)
@@ -51,7 +51,7 @@ async def send_video(
             )
             # Время жизни файла: подписчику дольше
             delay = 900 if sub else 300
-            logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через {delay} секунд")
+            logger.info(f"🗑️ [DELETE] Файл {file_path} будет удалён через {delay} секунд")
             asyncio.create_task(remove_file_later(file_path, delay=delay, message=message))
         else:
             me = await bot.get_me()

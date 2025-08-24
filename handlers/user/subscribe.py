@@ -36,7 +36,7 @@ def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
             text=f"{t.name} — {t.price} RUB",
             callback_data=f"{BUY_PREFIX}{t.id}"
         )
-    builder.button(text="⬅️ Назад", callback_data="profile")
+    builder.button(text="⬅️ В профиль", callback_data="profile")
     builder.adjust(1)
     return builder.as_markup()
 

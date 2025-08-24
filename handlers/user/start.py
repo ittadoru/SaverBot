@@ -28,8 +28,8 @@ PROMO_MAX_TRIES = 5
 router = Router()
 
 async def _generate_unique_promocode(session, tries: int = PROMO_MAX_TRIES) -> str | None:
-    """Пытается создать и сохранить уникальный промокод, возвращает код или None.
-
+    """
+    Пытается создать и сохранить уникальный промокод, возвращает код или None.
     Проверяем коллизии через запрос существующего кода (быстро и просто).
     """
     for attempt in range(1, tries + 1):
@@ -77,6 +77,10 @@ async def cmd_start(message: types.Message) -> None:
         except Exception:
             pass
 
+    bot_user = await message.bot.get_me()
+    if user_id == bot_user.id:
+        return
+
     async with get_session() as session:
         is_new = not await is_user_exists(session, user_id)
         # referrer_id только для новых пользователей
@@ -86,12 +90,15 @@ async def cmd_start(message: types.Message) -> None:
         await log_user_activity(session, user_id)
         if is_new:
             promo_code = await _generate_unique_promocode(session)
-            # --- Бонус за реферала: +1 день подписки рефереру ---
+            # --- Бонус за реферала: +3 дня подписки рефереру ---
             if referrer_id:
                 try:
-                    await message.answer("Ты получил бонус за реферала! (1 день подписки)")
-                    await add_subscriber_with_duration(session, referrer_id, 1)
-                    logger.info(f"🎁 [START] Начислен бонус (+1 день) подписки рефереру {referrer_id} за нового пользователя {user_id}")
+                    await message.answer("Ты получил бонус за реферала! (3 дня подписки)")
+                    await add_subscriber_with_duration(session, user_id, 3)
+
+                    await message.bot.send_message(referrer_id, "Ты получил бонус за реферала! (3 дня подписки)")
+                    await add_subscriber_with_duration(session, referrer_id, 3)
+                    logger.info(f"🎁 [START] Начислен бонус (+3 дня) подписки рефереру {referrer_id} за нового пользователя {user_id}")
                     # --- Проверка уровня реферера и выдача VIP/бессрочной подписки ---
                     ref_count, level, _ = await get_referral_stats(session, referrer_id)
                     if level == 5:

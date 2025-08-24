@@ -11,7 +11,6 @@ import os
 import uuid
 import asyncio
 from pytubefix import YouTube
-from aiogram import types
 
 from utils.logger import get_logger
 from db.subscribers import is_subscriber as db_is_subscriber
@@ -71,7 +70,7 @@ class YTDLPDownloader(BaseDownloader):
                 filename
             ]
 
-            logger.info(f"🎛️ [MUX] ffmpeg команда: {' '.join(cmd)}")
+            logger.info(f"🎛️ [MUX] ffmpeg объединение начинается")
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
@@ -79,14 +78,14 @@ class YTDLPDownloader(BaseDownloader):
                 raise Exception(f"ffmpeg mux error: {stderr.decode()}")
             # Удаляем временные файлы
             try:
-                os.remove(video_path)
-                os.remove(audio_path)
+                await asyncio.to_thread(os.remove, video_path)
+                await asyncio.to_thread(os.remove, audio_path)
             except Exception:
                 pass
             logger.info("✅ [DOWNLOAD] Скачивание успешно: файл=%s", filename)
             return filename
 
-    async def get_available_video_options(self, url: str, max_filesize_mb: int = 1024) -> dict:
+    async def get_available_video_options(self, url: str) -> dict:
         """
         Возвращает title, thumbnail_url и список форматов mp4 (240-1080p, не webm, не выше лимита по размеру).
         Каждый формат: {'itag', 'res', 'progressive', 'filesize', 'mime_type'}
@@ -106,8 +105,6 @@ class YTDLPDownloader(BaseDownloader):
                         continue
                     if 240 <= res <= 1080:
                         size_mb = s.filesize / 1024 / 1024 if s.filesize else 0
-                        if size_mb > max_filesize_mb:
-                            continue
                         formats.append({
                             'itag': s.itag,
                             'res': s.resolution,
