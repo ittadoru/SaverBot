@@ -24,3 +24,11 @@ def pagination_keyboard(current_page: int, total_pages: int, prefix: str = "page
         for text, cb in extra_buttons:
             kb.button(text=text, callback_data=cb)
     return kb.as_markup()
+
+def subscribe_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура с кнопкой подписки."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оформить подписку", callback_data="subscribe")]
+        ]
+    )
