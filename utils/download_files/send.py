@@ -33,33 +33,33 @@ async def send_video(
         if file_size > TELEGRAM_LIMIT_MB * 1024 * 1024:
             file_name = await asyncio.to_thread(os.path.basename, file_path)
             
-            await bot.send_document(
-                chat_id=chat_id,
-                document=FSInputFile(file_path, filename=file_name),
-                caption=f"📥 Файл больше технического лимита Telegram для бота. Скачайте как документ."
-            )
+            # await bot.send_document(
+            #     chat_id=chat_id,
+            #     document=FSInputFile(file_path, filename=file_name),
+            #     caption=f"📥 Файл больше технического лимита Telegram для бота. Скачайте как документ."
+            # )
 
-            # link = f"{DOMAIN}/video/{file_name}"
-            # keyboard = types.InlineKeyboardMarkup(
-            #     inline_keyboard=[
-            #         [types.InlineKeyboardButton(text="💾 Скачать видео", url=link)]
-            #     ]
-            # )
-            # # Определяем статус подписки
-            # async with get_session() as session:
-            #     sub = await db_is_subscriber(session, user_id)
-            # await bot.send_message(
-            #     chat_id,
-            #     text=(
-            #         f"📥 Файл больше технического лимита Telegram для бота. Используйте ссылку ниже для скачивания.\n\n"
-            #         + ("⭐ У вас активна подписка — ссылка будет жить дольше." if sub else "⏳ Ссылка истечёт через 5 минут (у подписчиков — дольше).")
-            #     ),
-            #     reply_markup=keyboard
-            # )
-            # # Время жизни файла: подписчику дольше
-            # delay = 900 if sub else 300
-            # logger.info(f"🗑️ [DELETE] Файл {file_path} будет удалён через {delay} секунд")
-            # asyncio.create_task(remove_file_later(file_path, delay=delay, message=message))
+            link = f"{DOMAIN}/video/{file_name}"
+            keyboard = types.InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [types.InlineKeyboardButton(text="💾 Скачать видео", url=link)]
+                ]
+            )
+            # Определяем статус подписки
+            async with get_session() as session:
+                sub = await db_is_subscriber(session, user_id)
+            await bot.send_message(
+                chat_id,
+                text=(
+                    f"📥 Файл больше технического лимита Telegram для бота. Используйте ссылку ниже для скачивания.\n\n"
+                    + ("⭐ У вас активна подписка — ссылка будет жить дольше." if sub else "⏳ Ссылка истечёт через 5 минут (у подписчиков — дольше).")
+                ),
+                reply_markup=keyboard
+            )
+            # Время жизни файла: подписчику дольше
+            delay = 900 if sub else 300
+            logger.info(f"🗑️ [DELETE] Файл {file_path} будет удалён через {delay} секунд")
+            asyncio.create_task(remove_file_later(file_path, delay=delay, message=message))
 
 
         else:
