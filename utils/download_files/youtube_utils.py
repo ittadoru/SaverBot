@@ -1,7 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from services.youtube import YTDLPDownloader
-from .download_manager import get_max_filesize_mb
 
 
 async def prepare_youtube_menu(url: str, user_id: int):

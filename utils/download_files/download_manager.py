@@ -4,8 +4,8 @@ from aiogram import types
 
 from services.youtube import YTDLPDownloader
 from services import get_downloader
-from utils.video_utils import get_video_resolution
-from utils.send import send_video, send_audio
+from utils.download_files.video_utils import get_video_resolution
+from utils.download_files.send import send_video, send_audio
 from db.base import get_session
 from db.subscribers import is_subscriber
 from db.downloads import get_daily_downloads

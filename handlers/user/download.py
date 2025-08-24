@@ -2,12 +2,12 @@ import logging
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 
-from utils.clean_url import strip_url_after_ampersand
+from utils.download_files.clean_url import strip_url_after_ampersand
 from utils.platform_detect import detect_platform
-from utils.download_manager import (
+from utils.download_files.download_manager import (
     is_busy, set_busy, check_download_permissions, process_youtube_or_other
 )
-from utils.youtube_utils import prepare_youtube_menu
+from utils.download_files.youtube_utils import prepare_youtube_menu
 from utils.keyboards import subscribe_keyboard
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,8 @@ async def download_handler(message: types.Message, state: FSMContext):
     if await is_busy(state):
         return await message.answer("⏳ Уже выполняется другая загрузка.")
     await set_busy(state, True)
+
+    wait_message = await message.answer("⏳ Секунду...")
 
     try:
         # Проверка лимитов, подписки, каналов
@@ -42,6 +44,8 @@ async def download_handler(message: types.Message, state: FSMContext):
                 reply_markup=keyboard,
                 parse_mode="HTML",
             )
+
+        await wait_message.delete()
 
         # остальные платформы — сразу качаем
         await process_youtube_or_other(message, url, user.id, platform, state)
