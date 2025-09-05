@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from config import BOT_TOKEN
 from handlers import register_handlers
@@ -28,6 +29,17 @@ def _create_dispatcher() -> Dispatcher:
     return Dispatcher(storage=MemoryStorage())
 
 
+async def set_bot_commands(bot: Bot):
+    """Устанавливает команды для меню бота."""
+    commands = [
+        BotCommand(command="subscribe", description="⭐️ Оформить подписку"),
+        BotCommand(command="profile", description="👤 Мой профиль"),
+        BotCommand(command="invite", description="👥 Пригласить друга"),
+        BotCommand(command="promocode", description="🎁 Активировать промокод"),
+    ]
+    await bot.set_my_commands(commands)
+
+
 async def main() -> None:
     """Настраивает логирование, регистрирует хендлеры и запускает polling."""
     bot = _create_bot()
@@ -36,6 +48,9 @@ async def main() -> None:
     setup_logger(bot)
     logger.info("Регистрация обработчиков...")
     register_handlers(dp)
+
+    logger.info("Установка команд бота...")
+    await set_bot_commands(bot)
 
     logger.info("Удаление старых апдейтов и запуск polling...")
     await bot.delete_webhook(drop_pending_updates=True)

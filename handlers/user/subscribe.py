@@ -1,3 +1,4 @@
+from config import SUPPORT_GROUP_ID, SUBSCRIBE_TOPIC_ID
 """Подписка: выбор тарифа и генерация ссылки на оплату."""
 import logging
 from contextlib import suppress
@@ -6,9 +7,11 @@ from aiogram import F, Router, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramAPIError
 
+
 from db.base import get_session
 from db.tariff import get_all_tariffs, get_tariff_by_id
-from utils.payment import create_payment
+from db.subscribers import add_subscriber_with_duration
+import uuid
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +37,7 @@ def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
     # Сортировка тарифов по цене по возрастанию
     for t in sorted(tariffs, key=lambda x: x.price):
         builder.button(
-            text=f"{t.name} — {t.price} RUB",
+            text=f"{t.name} — {t.price} ⭐️",
             callback_data=f"{BUY_PREFIX}{t.id}"
         )
     builder.button(text="⬅️ В профиль", callback_data="profile")
@@ -81,6 +84,7 @@ async def _show_subscribe_menu(message: types.Message, callback: types.CallbackQ
         await callback.answer()
 
 
+
 @router.callback_query(F.data.startswith(BUY_PREFIX))
 async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     """Создаёт платёж и выдаёт кнопку оплаты тарифа."""
@@ -98,34 +102,81 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
         await callback.answer("Тариф не найден.", show_alert=True)
         return
 
+    # Генерируем уникальный payload для каждой оплаты
+    unique_id = uuid.uuid4().hex
+    payload = f"subscribe_{tariff.id}_{user_id}_{unique_id}"
+    prices = [types.LabeledPrice(label=tariff.name, amount=int(tariff.price))]
+    logger.info(
+        "[STARS] send_invoice: user_id=%s, tariff_id=%s, payload=%s, price=%s, label=%s",
+        user_id, tariff.id, payload, tariff.price, tariff.name
+    )
+    await callback.bot.send_invoice(
+        chat_id=user_id,
+        title=f"Подписка: {tariff.name}",
+        description=f"💳 Для оплаты тарифа нажмите на кнопку оплаты",
+        payload=payload,
+        provider_token="STARS",
+        currency="XTR",
+        prices=prices,
+        need_email=False,
+        need_name=False,
+        need_phone_number=False,
+        is_flexible=False,
+    )
+    await callback.answer()
+
+@router.message(F.content_type == 'successful_payment')
+async def stars_successful_payment_handler(message: types.Message):
+    """Обработка успешной оплаты Stars: продлеваем подписку."""
+    user_id = message.from_user.id
+    payload = message.successful_payment.invoice_payload  # формат: subscribe_{tariff_id}_{user_id}_{uuid}
     try:
-        me = await callback.bot.get_me()
-        payment_url, payment_id = create_payment(
-            user_id=user_id,
-            amount=tariff.price,
-            description=f"Подписка: {tariff.name}",
-            bot_username=me.username or "bot",
-            metadata={
-                "user_id": str(user_id),
-                "tariff_id": str(tariff.id)
-            }
-        )
-        logger.info(
-            "💸 [SUBSCRIBE] Создан платёж %s для user=%s tariff=%s price=%s", payment_id, user_id, tariff.id, tariff.price
-        )
-    except Exception as e:
-        logger.exception("❌ [SUBSCRIBE] Ошибка создания платежа для user=%s tariff=%s", user_id, tariff_id)
-        await callback.message.answer("Ошибка создания платежа. Попробуйте позже.", show_alert=True)
+        if payload.startswith("subscribe_"):
+            parts = payload.split("_")
+            tariff_id = int(parts[1])
+        else:
+            await message.answer("Ошибка: неизвестный тариф.")
+            return
+    except Exception:
+        await message.answer("Ошибка: не удалось определить тариф.")
         return
 
-    markup = InlineKeyboardBuilder()
-    markup.button(text="💸 Оплатить", url=payment_url)
-    markup.adjust(1)
+    async with get_session() as session:
+        tariff = await get_tariff_by_id(session, tariff_id)
+        if not tariff:
+            await message.answer("Ошибка: тариф не найден.")
+            return
+        await add_subscriber_with_duration(session, user_id, tariff.duration_days)
 
-    with suppress(TelegramAPIError):
-        await callback.message.edit_text(
-            f"💳 Для оплаты тарифа <b>{tariff.name}</b> нажмите на кнопку оплаты",
-            parse_mode=PARSE_MODE,
-            reply_markup=markup.as_markup(),
-        )
-    await callback.answer()
+    logger.info(
+        "[STARS] successful_payment: user_id=%s, payload=%s, total_amount=%s, currency=%s, telegram_payment_charge_id=%s, provider_payment_charge_id=%s",
+        user_id,
+        payload,
+        message.successful_payment.total_amount,
+        message.successful_payment.currency,
+        message.successful_payment.telegram_payment_charge_id,
+        message.successful_payment.provider_payment_charge_id
+    )
+
+    await message.answer(
+        f"✅ Оплата Stars прошла успешно!\nВаша подписка <b>{tariff.name}</b> активна на {tariff.duration_days} дней.",
+        parse_mode="HTML"
+    )
+    # Уведомление админу/группе
+    user = message.from_user
+    username = f"@{user.username}" if user.username else "—"
+    full_name = user.full_name if hasattr(user, "full_name") else user.first_name
+    await message.bot.send_message(
+        SUPPORT_GROUP_ID,
+        (
+            f"<b>💳 Новая оплата через Stars</b>\n\n"
+            f"👤 {full_name} ({username})\n"
+            f"🆔 <code>{user.id}</code>\n"
+            f"🏷️ {tariff.name}\n"
+            f"⏳ {tariff.duration_days} дн.\n"
+            f"💳 Telegram ID: <code>{message.successful_payment.telegram_payment_charge_id}</code>\n"
+            f"💳 Provider ID: <code>{message.successful_payment.provider_payment_charge_id}</code>\n"
+        ),
+        parse_mode="HTML",
+        message_thread_id=SUBSCRIBE_TOPIC_ID,
+    )

@@ -1,7 +1,7 @@
 
-# SAVERBOT
+# AtariSaver
 
-**SAVERBOT** — это Telegram-бот для скачивания видео из популярных соцсетей и работы с подписками.  
+**AtariSaver** — это Telegram-бот для скачивания видео из популярных соцсетей и работы с подписками.  
 Бот написан на **Python (aiogram 3 + FastAPI)** и использует **PostgreSQL** для хранения данных.  
 
 Весь проект упакован в Docker-контейнеры для удобного запуска и развёртывания.
@@ -51,6 +51,7 @@ docker volume ls
 docker volume rm pgdata
 docker compose run --rm bot bash
 alembic revision --autogenerate -m "initial"
+alembic upgrade head
 exit
 docker compose up --build
 ```

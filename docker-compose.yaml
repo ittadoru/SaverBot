@@ -18,7 +18,7 @@ services:
 
   bot:
     build: .
-    image: saverbot-app
+    image: saver_bot
     restart: always
     env_file: [.env]
     working_dir: /app
@@ -38,7 +38,7 @@ services:
       "
 
   api:
-    image: saverbot-app
+    image: saver_bot
     restart: always
     env_file: [.env]
     working_dir: /app

@@ -20,7 +20,7 @@ def get_main_menu_keyboard():
     )
     builder.row(
         InlineKeyboardButton(text="👥 Пригласить друга", callback_data="invite_friend"),
-        InlineKeyboardButton(text="📊 Мои рефералы", callback_data="my_referrals")
+        InlineKeyboardButton(text="🤝 Об уровнях", callback_data="referral_info")
     )
     builder.row(
         InlineKeyboardButton(text="ℹ️ Подробнее", callback_data="more_info"),
@@ -29,7 +29,7 @@ def get_main_menu_keyboard():
 
 MAIN_MENU_TEXT = (
     "<b>👋 Привет, {username}!</b>\n"
-    "<i>SaverBot — твой помощник для скачивания видео.</i>\n\n"
+    "<i>AtariSaver — твой помощник для скачивания видео.</i>\n\n"
     "<b>✨ Возможности:</b>\n"
     "<b>•</b> Скачивай видео и аудио с YouTube, TikTok, Instagram\n"
     "<b>•</b> Следи за лимитами и историей\n"

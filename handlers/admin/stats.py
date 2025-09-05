@@ -56,7 +56,7 @@ async def handle_stats(callback: CallbackQuery) -> None:
     sub_percentage = (total_subscribers / total_users * 100) if total_users > 0 else 0
 
     text = (
-        "<b>📊 Статистика SaverBot</b>\n\n"
+        "<b>📊 Статистика AtariSaver</b>\n\n"
         "<b>👥 Пользователи:</b> <b>{total_users}</b>\n"
         "<b>💎 Подписчики:</b> <b>{total_subscribers}</b> ({sub_percentage:.2f}%)\n"
         "<b>🎟️ Активных промокодов:</b> <b>{active_promos}</b>\n\n"

@@ -1,5 +1,5 @@
 
-"""Информация о возможностях и бонусах SaverBot для пользователя."""
+"""Информация о возможностях и бонусах AtariSaver для пользователя."""
 
 from aiogram import F, Router, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
@@ -13,7 +13,7 @@ async def about_handler(callback: types.CallbackQuery) -> None:
     Отвечает пользователю информацией о функционале бота.
     """
     about_text = (
-        "<b>👋 Привет! Я — SaverTIY</b>\n"
+        "<b>👋 Привет! Я — AtariSaver</b>\n"
         "<i>Твой элитный помощник для скачивания видео и аудио!</i>\n\n"
         "<b>✨ Возможности:</b>\n"
         "<b>•</b> Быстрое скачивание видео и аудио с YouTube, TikTok, Instagram.\n"
@@ -39,9 +39,6 @@ async def about_handler(callback: types.CallbackQuery) -> None:
 def get_about_keyboard():
     """Клавиатура: Подробнее о рефералах + Назад в профиль."""
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="ℹ️ О реферальной программе", callback_data="referral_info")
-    )
     builder.row(
         InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")
     )

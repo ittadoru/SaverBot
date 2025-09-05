@@ -1,55 +1,51 @@
 """
 Обработчики реферальной системы пользователя: генерация ссылки, просмотр своих рефералов.
 """
+from aiogram import Router, Bot, F
 from aiogram.filters import Command
+from aiogram.types import CallbackQuery, Message
 
-from aiogram import Router
-from aiogram.types import CallbackQuery
-from aiogram.utils.markdown import hbold
 from db.users import get_ref_link, User
 from db.base import get_session
 from sqlalchemy import select, func
-from utils.keyboards import back_button
 
+import config
+from utils.keyboards import back_button
 
 router = Router()
 
-async def send_invite_link(user_id: int, bot, message_or_callback):
-    """Отправляет пользователю его реферальную ссылку."""
+REFERRAL_LINK_TEXT = (
+    "<b>👥 Пригласи друга и получи бонус!</b>\n\n"
+    "Отправь эту ссылку друзьям — за каждого нового пользователя ты получишь <b>{ref_gift} дня</b> подписки!\n\n"
+    "🔗 Ваша ссылка:\n{ref_link}\n\n"
+    "👤 Приглашено: <b>{count}</b> чел."
+)
+
+async def get_referral_text(bot: Bot, user_id: int) -> str:
+    """Формирует текст с реферальной ссылкой, количеством рефералов и бонусом."""
     bot_username = (await bot.me()).username
     ref_link = get_ref_link(bot_username, user_id)
-    text = (
-        "👥 <b>Пригласи друга и получи бонус!</b>\n\n"
-        "Отправь эту ссылку друзьям — за каждого нового пользователя ты получишь приятный бонус!\n\n"
-        f"{ref_link}"
-    )
-    await message_or_callback.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
+    async with get_session() as session:
+        result = await session.execute(select(func.count()).select_from(User).where(User.referrer_id == user_id))
+        count = result.scalar_one()
+    return REFERRAL_LINK_TEXT.format(ref_link=ref_link, count=count, ref_gift=config.REF_GIFT_DAYS)
 
-@router.callback_query(lambda c: c.data == "invite_friend")
-async def invite_friend_callback(callback: CallbackQuery):
-    await send_invite_link(callback.from_user.id, callback.bot, callback.message)
+@router.callback_query(F.data == "invite_friend")
+async def invite_friend_callback(callback: CallbackQuery, bot: Bot):
+    """Показывает пользователю его реферальную ссылку, количество приглашённых и бонусные дни."""
+    text = await get_referral_text(bot, callback.from_user.id)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
 
 @router.message(Command("invite"))
-async def invite_friend_command(message):
-    await send_invite_link(message.from_user.id, message.bot, message)
+async def invite_friend_command(message: Message, bot: Bot):
+    """Обработчик команды /invite."""
+    text = await get_referral_text(bot, message.from_user.id)
+    await message.answer(text, parse_mode="HTML", reply_markup=back_button("profile"))
 
-@router.callback_query(lambda c: c.data == "my_referrals")
-async def my_referrals(callback: CallbackQuery):
-    """Показывает пользователю список или статистику его рефералов."""
-    user_id = callback.from_user.id
-    async with get_session() as session:
-        result = await session.execute(select(User).where(User.referrer_id == user_id))
-        referrals = result.scalars().all()
-
-    if not referrals:
-        text = "У тебя пока нет рефералов. Пригласи друзей и получи бонус!"
-    else:
-        ref_list = f"{hbold('Твои рефералы')}:\n\n"
-        for u in referrals:
-            uname = f"@{u.username}" if u.username else f"ID {u.id}"
-            ref_list += f"• {uname}\n"
-        ref_list += f"\nВсего: {len(referrals)} чел."
-        text = ref_list
+@router.callback_query(F.data == "my_referrals")
+async def my_referrals_callback(callback: CallbackQuery, bot: Bot):
+    """Обрабатывает нажатие на кнопку 'Мои рефералы', показывая ту же информацию, что и 'Пригласить друга'."""
+    text = await get_referral_text(bot, callback.from_user.id)
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
 
 async def get_referral_stats(session, user_id: int):

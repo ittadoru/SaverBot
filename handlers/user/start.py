@@ -24,6 +24,7 @@ PROMO_PREFIX = "WELCOME"
 PROMO_RANDOM_MIN = 100_000
 PROMO_RANDOM_MAX = 999_999
 PROMO_MAX_TRIES = 5
+REF_GIFT_DAYS = 3
 
 router = Router()
 
@@ -94,10 +95,10 @@ async def cmd_start(message: types.Message) -> None:
             if referrer_id:
                 try:
                     await message.answer("Ты получил бонус за реферала! (3 дня подписки)")
-                    await add_subscriber_with_duration(session, user_id, 3)
+                    await add_subscriber_with_duration(session, user_id, REF_GIFT_DAYS)
 
                     await message.bot.send_message(referrer_id, "Ты получил бонус за реферала! (3 дня подписки)")
-                    await add_subscriber_with_duration(session, referrer_id, 3)
+                    await add_subscriber_with_duration(session, referrer_id, REF_GIFT_DAYS)
                     logger.info(f"🎁 [START] Начислен бонус (+3 дня) подписки рефереру {referrer_id} за нового пользователя {user_id}")
                     # --- Проверка уровня реферера и выдача VIP/бессрочной подписки ---
                     ref_count, level, _ = await get_referral_stats(session, referrer_id)

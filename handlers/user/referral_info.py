@@ -1,4 +1,4 @@
-"""Подробная информация о реферальной программе SaverBot."""
+"""Подробная информация о реферальной программе AtariSaver."""
 
 from aiogram import F, Router, types
 from utils.keyboards import back_button
@@ -12,7 +12,7 @@ async def referral_info_handler(callback: types.CallbackQuery) -> None:
     Отправляет пользователю подробную информацию о реферальной программе.
     """
     referral_text = (
-        "<b>🤝 Реферальная программа SaverTIY</b>\n"
+        "<b>🤝 Реферальная программа AtariSaver</b>\n"
         "<i>Приглашай друзей и получай элитные бонусы!</i>\n\n"
         "<b>Как это работает?</b>\n"
         "<b>•</b> За каждого приглашённого — <b>+1 день подписки</b> и +1 к счётчику рефералов.\n"
@@ -36,6 +36,6 @@ async def referral_info_handler(callback: types.CallbackQuery) -> None:
     )
 
     await callback.message.edit_text(
-        referral_text, reply_markup=back_button("more_info"), parse_mode="HTML"
+        referral_text, reply_markup=back_button("profile"), parse_mode="HTML"
     )
     await callback.answer()

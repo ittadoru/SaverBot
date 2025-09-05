@@ -144,7 +144,7 @@ async def process_tariff_name(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
         await create_tariff(session, name=name, price=int(price), duration_days=int(days))
     logger.info(
-        "Админ %d создал новый тариф (одной строкой): %s, %s дней, %s RUB",
+        "Админ %d создал новый тариф (одной строкой): %s, %s дней, %s ⭐️",
         message.from_user.id, name, days, price
     )
     await message.answer(
