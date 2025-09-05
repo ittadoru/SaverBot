@@ -64,7 +64,7 @@ services:
 
   nginx:
     image: nginx:1.25
-    container_name: nginx
+    container_name: saverbot_nginx
     restart: always
     ports:
       - "8008:80"
