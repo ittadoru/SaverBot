@@ -24,7 +24,9 @@ services:
     restart: always
     env_file: [.env]
     working_dir: /app
-    volumes: [ .:/app ]
+    volumes:
+      - .:/app
+      - downloads_data:/app/downloads  # <-- ДОБАВЛЕНО
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,7 +39,9 @@ services:
     restart: always
     env_file: [.env]
     working_dir: /app
-    volumes: [ .:/app ]
+    volumes:
+      - .:/app
+      - downloads_data:/app/downloads  # <-- ДОБАВЛЕНО
     depends_on:
       - postgres
     command: >
@@ -51,7 +55,6 @@ services:
       - "8008:80"
       - "8443:443"
     volumes:
-      # Вот он, правильный способ, как в вашем рабочем проекте:
       - ./nginx:/etc/nginx/conf.d:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
@@ -59,3 +62,4 @@ services:
 
 volumes:
   saverbot_pgdata:
+  downloads_data: {}
