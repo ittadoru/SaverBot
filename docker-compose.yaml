@@ -29,15 +29,7 @@ services:
       postgres:
         condition: service_healthy
     command: >
-      bash -c "
-        echo 'Running migrations (bot)...';
-        if ls alembic/versions/*.py 1>/dev/null 2>&1; then
-          alembic upgrade head || { echo 'Alembic failed'; exit 1; }
-        else
-          python -m scripts.ensure_schema || { echo 'ensure_schema failed'; exit 1; }
-        fi;
-        watchfiles --filter python 'python bot.py'
-      "
+      bash -c "alembic upgrade head && watchfiles --filter python 'python bot.py'"
 
   api:
     image: saver_bot
@@ -47,20 +39,9 @@ services:
     working_dir: /app
     volumes: [ .:/app ]
     depends_on:
-      postgres:
-        condition: service_healthy
-      bot:
-        condition: service_started
+      - postgres
     command: >
-      bash -c "
-        echo 'Ensuring schema (api)...';
-        if ls alembic/versions/*.py 1>/dev/null 2>&1; then
-          echo 'Revisions present (already migrated by bot).';
-        else
-          python -m scripts.ensure_schema || true
-        fi;
-        uvicorn server:app --host 0.0.0.0 --port 8000 --reload
-      "
+      bash -c "uvicorn server:app --host 0.0.0.0 --port 8000 --reload"
 
   nginx:
     image: nginx:1.25
@@ -70,8 +51,8 @@ services:
       - "8008:80"
       - "8443:443"
     volumes:
-      # ПРАВИЛЬНЫЙ СПОСОБ: Монтируем конфиг в /etc/nginx/conf.d/
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Вот он, правильный способ, как в вашем рабочем проекте:
+      - ./nginx:/etc/nginx/conf.d:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - api
