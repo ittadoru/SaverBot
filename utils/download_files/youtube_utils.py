@@ -20,18 +20,19 @@ async def prepare_youtube_menu(url: str, user_id: int):
         _, level, _ = await get_referral_stats(session, user_id)
 
     # Фильтрация форматов по статусу
+    from config import DOWNLOAD_FILE_LIMIT
     def is_format_allowed(fmt):
         res_int = int(fmt["res"].replace("p", ""))
         size_mb = fmt["size_mb"]
         if sub:
-            return 240 <= res_int <= 1080 and size_mb <= 2048
+            return 240 <= res_int <= 1080 and size_mb <= DOWNLOAD_FILE_LIMIT * 20
         if level == 2:
-            return res_int < 720 and size_mb <= 150
+            return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT * 3
         if level == 3:
-            return res_int < 720 and size_mb <= 250
+            return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT * 5
         if level == 4:
-            return res_int < 720 and size_mb <= 1024
-        return res_int < 720 and size_mb <= 50
+            return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT * 10
+        return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT
 
 
     # Собираем все уникальные разрешения
