@@ -36,11 +36,10 @@ def _format_subscription_status(expire_at: datetime | None) -> str:
     return "❌ Подписка истекла"
 
 
-def _build_profile_text(user_id: int, name: str, username: str, status: str, total: int, today: int, left: int, platform_stats: dict) -> str:
+def _build_profile_text(name: str, username: str, status: str, total: int, today: int, left: int, platform_stats: dict) -> str:
     username_part = f"@{username}" if username else "—"
     stats = (
         f"<b>👤 Пользователь:</b>\n\n"
-        f"ID: <code>{user_id}</code>\n"
         f"Имя: {name}\n"
         f"{status}\n"
         f"Username: {username_part}\n\n"
@@ -113,7 +112,7 @@ async def show_profile(callback: CallbackQuery) -> None:
         else:
             left = max(0, limit - today)
     status = _format_subscription_status(expire_at)
-    text = _build_profile_text(user_id, name, username, status, total, today, left, platform_stats)
+    text = _build_profile_text(name, username, status, total, today, left, platform_stats)
     text += _build_referral_text(ref_count, level, to_next, progress_bar)
 
     current = (callback.message.text or "").strip()
