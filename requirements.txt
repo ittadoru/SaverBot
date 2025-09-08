@@ -14,4 +14,4 @@ yt-dlp==2024.10.22
 moviepy==2.2.1
 aiofiles==24.1.0
 pytubefix==9.4.1
-Telethon==1.40.0
+Telethon==1.41.2

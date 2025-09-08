@@ -63,13 +63,18 @@ async def check_download_permissions(user_id: int):
 # ---------------- Размеры файлов ----------------
 async def get_max_filesize_mb(level: int, sub: bool) -> int:
     """Определение максимального размера файла в зависимости от уровня и подписки."""
+
+    if sub:
+        return DOWNLOAD_FILE_LIMIT * 20
+    
     if level == 1:
         return DOWNLOAD_FILE_LIMIT
     elif level == 2:
         return DOWNLOAD_FILE_LIMIT * 3
     elif level == 3:
         return DOWNLOAD_FILE_LIMIT * 5
-    return DOWNLOAD_FILE_LIMIT * 10
+    else:
+        return DOWNLOAD_FILE_LIMIT * 10
 
 
 # ---------------- Скачивание ----------------

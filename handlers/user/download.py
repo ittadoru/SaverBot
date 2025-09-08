@@ -71,22 +71,14 @@ async def ytres_callback_handler(callback: types.CallbackQuery, state: FSMContex
 
     await process_youtube_or_other(callback.message, url, user.id, "youtube", state, itag)
 
-
-@router.callback_query(lambda c: c.data.startswith("ytlocked:"))
-async def ytlocked_callback_handler(callback: types.CallbackQuery, state: FSMContext):
-    """Причина блокировки (нужна подписка или превышен размер)."""
-    parts = callback.data.split(":", 2)
-    reason = parts[1] if len(parts) > 1 else "sub"
-
-    if reason == "file":
-        text = ("🔒 Данное разрешение недоступно: файл слишком большой.\n\n"
-                "Повысьте уровень или оформите подписку для увеличения лимита.")
-    else:
-        text = ("🔒 Доступ ограничен.\n\n"
-                "Приобретите подписку, чтобы разблокировать.")
-
-    await callback.message.answer(text, reply_markup=subscribe_keyboard())
-    await callback.answer()
+@router.callback_query(lambda c: c.data == "disabled")
+async def yt_disabled_callback_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка нажатия на заблокированное разрешение (disabled button)."""
+    text = (
+        "🔒 Данное разрешение недоступно для вашего уровня доступа или подписки.\n\n"
+        "Повысьте уровень или оформите подписку для разблокировки."
+    )
+    await callback.answer(text, show_alert=True)
 
 
 @router.callback_query(lambda c: c.data.startswith("ytdl:"))

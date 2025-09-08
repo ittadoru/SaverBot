@@ -9,10 +9,32 @@ async def prepare_youtube_menu(url: str, user_id: int):
     """
     downloader = YTDLPDownloader()
     info = await downloader.get_available_video_options(url)
-
     preview = info["thumbnail_url"]
 
-    # получаем доступные форматы
+    # Получаем статус пользователя
+    from db.base import get_session
+    from db.subscribers import is_subscriber as db_is_subscriber
+    from handlers.user.referral import get_referral_stats
+    async with get_session() as session:
+        sub = await db_is_subscriber(session, user_id)
+        _, level, _ = await get_referral_stats(session, user_id)
+
+    # Фильтрация форматов по статусу
+    def is_format_allowed(fmt):
+        res_int = int(fmt["res"].replace("p", ""))
+        size_mb = fmt["size_mb"]
+        if sub:
+            return res_int >= 720 and size_mb <= 2048
+        if level == 2:
+            return res_int < 720 and size_mb <= 150
+        if level == 3:
+            return res_int < 720 and size_mb <= 250
+        if level == 4:
+            return res_int < 720 and size_mb <= 1024
+        return res_int < 720 and size_mb <= 50
+
+
+    # Собираем все уникальные разрешения
     unique_res = {}
     for fmt in info["formats"]:
         if fmt.get("mime_type") == "video/mp4":
@@ -30,7 +52,6 @@ async def prepare_youtube_menu(url: str, user_id: int):
                     continue
 
     sorted_res = sorted(unique_res.items(), key=lambda x: int(x[0].replace("p", "")))
-    max_res = max([int(r.replace("p", "")) for r, _ in sorted_res], default=0)
 
     # текст
     lines = [f"<b>🎬 {info['title']}</b>\n", "Приблизительные размеры:"]
@@ -40,15 +61,13 @@ async def prepare_youtube_menu(url: str, user_id: int):
     for res, fmt in sorted_res:
         size_mb = fmt.get("size_mb") or (fmt.get("filesize", 0) / 1024 / 1024)
         size_str = f"{size_mb:.0f}MB" if size_mb else "?MB"
-
-        emoji = "⚡️"
-        cb = f"ytres:{fmt['itag']}"
-
+        allowed = is_format_allowed(fmt)
+        emoji = "⚡️" if allowed else "🔒"
+        cb = f"ytres:{fmt['itag']}" if allowed else "disabled"
         row.append(InlineKeyboardButton(text=f"{emoji} {res}", callback_data=cb))
         if len(row) == 2:
             rows.append(row)
             row = []
-
         lines.append(f"{emoji}  {res}: {size_str}")
 
     if row:
@@ -57,8 +76,7 @@ async def prepare_youtube_menu(url: str, user_id: int):
     # аудио
     rows.append([InlineKeyboardButton(text="🎧 Аудио", callback_data=f"ytdl:audio:{url}")])
 
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
-
     lines.append("\n<i>Выберите разрешение или получите только аудио:</i>")
-
     return keyboard, "\n".join(lines), preview

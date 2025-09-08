@@ -19,9 +19,13 @@ logger = logging.getLogger(__name__)
 
 def _create_bot() -> Bot:
     """Создаёт экземпляр бота с HTML parse_mode."""
+    from aiogram.client.telegram import TelegramAPIServer
+    from aiogram.client.session.aiohttp import AiohttpSession
+    
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN не задан")
-    return Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    session = AiohttpSession(api=TelegramAPIServer.from_base("http://telegram-bot-api:8081", is_local=True))
+    return Bot(token=BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 
 def _create_dispatcher() -> Dispatcher:
