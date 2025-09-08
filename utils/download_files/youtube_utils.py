@@ -24,7 +24,7 @@ async def prepare_youtube_menu(url: str, user_id: int):
         res_int = int(fmt["res"].replace("p", ""))
         size_mb = fmt["size_mb"]
         if sub:
-            return res_int >= 720 and size_mb <= 2048
+            return 240 <= res_int <= 1080 and size_mb <= 2048
         if level == 2:
             return res_int < 720 and size_mb <= 150
         if level == 3:
