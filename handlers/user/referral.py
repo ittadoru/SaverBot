@@ -31,7 +31,7 @@ async def get_referral_text(user_id: int) -> str:
 def referral_keyboard(ref_link: str):
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔗 Пригласить друга", url=ref_link)],
+            [InlineKeyboardButton(text="🔗 Пригласить друга", switch_inline_query=ref_link)],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
         ]
     )
