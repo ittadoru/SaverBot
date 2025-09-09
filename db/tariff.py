@@ -25,20 +25,20 @@ class Tariff(Base):
 
 
 async def create_tariff(
-    session: AsyncSession, name: str, price: int, duration_days: int
-) -> Tariff:
-    """
-    Создаёт новый тариф и добавляет его в базу данных.
-    """
-    new_tariff = Tariff(name=name, price=price, star_price=0, duration_days=duration_days)
-    session.add(new_tariff)
-    try:
-        await session.commit()
-        await session.refresh(new_tariff)
-    except SQLAlchemyError:
-        await session.rollback()
-        raise
-    return new_tariff
+        session: AsyncSession, name: str, price: int, duration_days: int, star_price: int = 0
+    ) -> Tariff:
+        """
+        Создаёт новый тариф и добавляет его в базу данных.
+        """
+        new_tariff = Tariff(name=name, price=price, star_price=star_price, duration_days=duration_days)
+        session.add(new_tariff)
+        try:
+            await session.commit()
+            await session.refresh(new_tariff)
+        except SQLAlchemyError:
+            await session.rollback()
+            raise
+        return new_tariff
 
 
 async def update_tariff(
