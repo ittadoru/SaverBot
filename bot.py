@@ -39,6 +39,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="subscribe", description="⭐️ Оформить подписку"),
         BotCommand(command="profile", description="👤 Профиль"),
         BotCommand(command="invite", description="👥 Пригласить друга"),
+        BotCommand(command='help', description='❓ Обратиться в поддержку'),
         BotCommand(command="promocode", description="🎁 Активировать промокод"),
     ]
     await bot.set_my_commands(commands)
