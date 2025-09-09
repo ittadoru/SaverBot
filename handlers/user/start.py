@@ -102,7 +102,7 @@ async def cmd_start(message: types.Message) -> None:
                     logger.info(f"🎁 [START] Начислен бонус (+3 дня) подписки рефереру {referrer_id} за нового пользователя {user_id}")
                     # --- Проверка уровня реферера и выдача VIP/бессрочной подписки ---
                     ref_count, level, _ = await get_referral_stats(session, referrer_id)
-                    if level == 5:
+                    if ref_count == 30:
                         # Бессрочная подписка: 100 лет = 36500 дней
                         await add_subscriber_with_duration(session, referrer_id, SUBSCRIPTION_LIFETIME_DAYS)
                         try:
@@ -110,19 +110,19 @@ async def cmd_start(message: types.Message) -> None:
                         except Exception:
                             pass
                         logger.info(f"🏆 [REFERAL] Реферер {referrer_id} получил бессрочную подписку за 5 уровень ({ref_count} рефералов)")
-                    elif level == 4:
+                    elif ref_count == 10:
                         try:
                             await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 4 уровня (10 рефералов) и получили VIP-статус!")
                         except Exception:
                             pass
                         logger.info(f"⭐️ [REFERAL] Реферер {referrer_id} стал VIP за 4 уровень ({ref_count} рефералов)")
-                    elif level == 3:
+                    elif ref_count == 3:
                         try:
                             await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 3 уровня (3 реферала) и улучшили лимиты!")
                         except Exception:
                             pass
                         logger.info(f"🥉 [REFERAL] Реферер {referrer_id} получил бонус за 3 уровень ({ref_count} рефералов)")
-                    elif level == 2:
+                    elif ref_count == 1:
                         try:
                             await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 2 уровня (1 реферал) и улучшили лимиты!")
                         except Exception:
