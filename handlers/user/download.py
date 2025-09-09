@@ -64,7 +64,7 @@ async def ytres_callback_handler(callback: types.CallbackQuery, state: FSMContex
     user = callback.from_user
 
     await set_busy(state, True)
-    await callback.message.answer("⏳ Скачиваем видео, подождите...")
+    await callback.message.answer("⏳ Скачиваем видео, подождите пару минут...")
 
     data = await state.get_data()
     url = data.get("yt_url")

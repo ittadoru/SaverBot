@@ -19,7 +19,7 @@ services:
 
   app:
     build: .
-    image: saver_bot
+    image: saver_bot:latest
     container_name: saverbot_app
     restart: always
     env_file: [.env]
