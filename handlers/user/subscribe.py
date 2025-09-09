@@ -105,19 +105,17 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     # Показываем выбор способа оплаты: YooKassa или Stars
     builder = InlineKeyboardBuilder()
     builder.button(
-        text=f"💳 Оплатить {tariff.price}₽ (YooKassa)",
+        text=f"💳 Оплатить {tariff.price} RUB",
         callback_data=f"pay_yookassa:{tariff.id}"
     )
     builder.button(
-        text=f"⭐️ Оплатить {getattr(tariff, 'star_price', tariff.price)}⭐️ (Telegram Stars)",
+        text=f"⭐️ Оплатить звездами {getattr(tariff, 'star_price', tariff.price)})",
         callback_data=f"pay_stars:{tariff.id}"
     )
     builder.button(text="⬅️ Назад", callback_data="subscribe")
     builder.adjust(1)
     await callback.message.edit_text(
-        f"<b>Выберите способ оплаты для тарифа <u>{tariff.name}</u>:</b>\n\n" +
-        f"• <b>YooKassa:</b> {tariff.price}₽\n" +
-        f"• <b>Telegram Stars:</b> {getattr(tariff, 'star_price', tariff.price)}⭐️",
+        f"<b>Выберите способ оплаты для тарифа <u>{tariff.name}</u>:</b>\n\n"
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
@@ -159,6 +157,52 @@ async def pay_stars_callback_handler(callback: types.CallbackQuery) -> None:
         need_name=False,
         need_phone_number=False,
         is_flexible=False,
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("pay_yookassa:"))
+async def pay_yookassa_callback_handler(callback: types.CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    try:
+        tariff_id = int(callback.data.split(":", 1)[1])
+    except Exception:
+        await callback.answer("Ошибка тарифа", show_alert=True)
+        return
+
+    async with get_session() as session:
+        tariff = await get_tariff_by_id(session, tariff_id)
+    if not tariff:
+        await callback.answer("Тариф не найден", show_alert=True)
+        return
+
+    try:
+        from utils.payment import create_payment
+        me = await callback.bot.get_me()
+        payment_url, payment_id = create_payment(
+            user_id=user_id,
+            amount=tariff.price,
+            description=f"Подписка: {tariff.name}",
+            bot_username=me.username or "bot",
+            metadata={
+                "user_id": str(user_id),
+                "tariff_id": str(tariff.id)
+            }
+        )
+    except Exception as e:
+        logger.exception("Ошибка создания платежа YooKassa")
+        await callback.answer("Ошибка создания платежа", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💳 Перейти к оплате", url=payment_url)
+    builder.button(text="⬅️ Назад", callback_data="subscribe")
+    builder.adjust(1)
+    await callback.message.edit_text(
+        f"<b>Оплата тарифа <u>{tariff.name}</u> через YooKassa</b>\n\n" +
+        f"Сумма: <b>{tariff.price}₽</b>\n\n" +
+        "Нажмите кнопку ниже для перехода к оплате.",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
     )
     await callback.answer()
 
