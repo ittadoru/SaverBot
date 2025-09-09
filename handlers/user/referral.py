@@ -10,43 +10,45 @@ from db.base import get_session
 from sqlalchemy import select, func
 
 import config
-from utils.keyboards import back_button
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 router = Router()
 
 REFERRAL_LINK_TEXT = (
     "<b>👥 Пригласи друга и получи бонус!</b>\n\n"
-    "Отправь эту ссылку друзьям — за каждого нового пользователя ты получишь <b>{ref_gift} дня</b> подписки!\n\n"
-    "🔗 Ваша ссылка:\n{ref_link}\n\n"
+    "Отправь приглашение друзьям — за каждого нового пользователя ты получишь <b>{ref_gift} дня</b> подписки!\n\n"
+    "Нажмите кнопку ниже, чтобы скопировать или отправить ссылку.\n\n"
     "👤 Приглашено: <b>{count}</b> чел."
 )
 
-async def get_referral_text(bot: Bot, user_id: int) -> str:
+async def get_referral_text(user_id: int) -> str:
     """Формирует текст с реферальной ссылкой, количеством рефералов и бонусом."""
-    bot_username = (await bot.me()).username
-    ref_link = get_ref_link(bot_username, user_id)
     async with get_session() as session:
         result = await session.execute(select(func.count()).select_from(User).where(User.referrer_id == user_id))
         count = result.scalar_one()
-    return REFERRAL_LINK_TEXT.format(ref_link=ref_link, count=count, ref_gift=config.REF_GIFT_DAYS)
+    return REFERRAL_LINK_TEXT.format(count=count, ref_gift=config.REF_GIFT_DAYS)
+
+def referral_keyboard(ref_link: str):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔗 Пригласить друга", url=ref_link)],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
+        ]
+    )
 
 @router.callback_query(F.data == "invite_friend")
 async def invite_friend_callback(callback: CallbackQuery, bot: Bot):
     """Показывает пользователю его реферальную ссылку, количество приглашённых и бонусные дни."""
-    text = await get_referral_text(bot, callback.from_user.id)
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
+    ref_link = get_ref_link((await bot.me()).username, callback.from_user.id)
+    text = await get_referral_text(callback.from_user.id)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=referral_keyboard(ref_link))
 
 @router.message(Command("invite"))
 async def invite_friend_command(message: Message, bot: Bot):
     """Обработчик команды /invite."""
-    text = await get_referral_text(bot, message.from_user.id)
-    await message.answer(text, parse_mode="HTML", reply_markup=back_button("profile"))
-
-@router.callback_query(F.data == "my_referrals")
-async def my_referrals_callback(callback: CallbackQuery, bot: Bot):
-    """Обрабатывает нажатие на кнопку 'Мои рефералы', показывая ту же информацию, что и 'Пригласить друга'."""
-    text = await get_referral_text(bot, callback.from_user.id)
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
+    ref_link = get_ref_link((await bot.me()).username, message.from_user.id)
+    text = await get_referral_text(message.from_user.id)
+    await message.answer(text, parse_mode="HTML", reply_markup=referral_keyboard(ref_link))
 
 async def get_referral_stats(session, user_id: int):
     """

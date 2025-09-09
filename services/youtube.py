@@ -11,6 +11,7 @@ import os
 import uuid
 import asyncio
 from pytubefix import YouTube
+import re 
 
 from utils.logger import get_logger
 from db.subscribers import is_subscriber as db_is_subscriber
@@ -213,13 +214,15 @@ class YTDLPDownloader(BaseDownloader):
         logger.info("⬇️ [AUDIO] Начало скачивания аудио, url=%s", url)
         """
         Скачивает лучший аудиопоток (m4a/mp4) через pytubefix, без конвертации в mp3.
-        Возвращает путь к скачанному m4a-файлу.
+        Имя файла — как название видео на YouTube (безопасно для файловой системы).
         """
-        filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.m4a")
+        yt = YouTube(url)
+        safe_title = re.sub(r'[^\w\d\-_ ]', '', yt.title).strip()
+        if not safe_title:
+            safe_title = str(uuid.uuid4())
+        filename = os.path.join(DOWNLOAD_DIR, f"{safe_title}.m4a")
         loop = asyncio.get_running_loop()
         def run_download():
-            yt = YouTube(url)
-            # Выбираем лучший аудиопоток в mp4/m4a
             stream = yt.streams.filter(only_audio=True, file_extension='mp4').order_by('abr').desc().first()
             if not stream:
                 raise Exception("No audio/mp4 stream found")
