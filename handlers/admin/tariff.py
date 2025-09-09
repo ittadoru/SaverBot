@@ -92,7 +92,7 @@ async def start_add_tariff(callback: CallbackQuery, state: FSMContext) -> None:
     kb.button(text="⬅️ Отмена", callback_data="tariff_menu")
     kb.adjust(1)
     await callback.message.edit_text(
-        "<b>➕ Добавление тарифа</b>\n\n<code>Название, дни, цена</code> через запятую.\nПример: <code>1 год, 365, 349</code>",
+        "<b>➕ Добавление тарифа</b>\n\n<code>Название, дни, цена, цена_звёздами (опционально)</code> через запятую.\nПример: <code>1 год, 365, 349, 299</code>",
         parse_mode="HTML",
         reply_markup=kb.as_markup()
     )
