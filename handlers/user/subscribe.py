@@ -115,7 +115,7 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     builder.button(text="⬅️ Назад", callback_data="subscribe")
     builder.adjust(1)
     await callback.message.edit_text(
-        f"<b>Выберите способ оплаты для тарифа <u>{tariff.name}</u>:</b>\n\n"
+        f"<b>Выберите способ оплаты для тарифа <u>{tariff.name}</u>:</b>\n\n",
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
