@@ -17,10 +17,11 @@ class Tariff(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     price = Column(Integer, nullable=False)
+    star_price = Column(Integer, nullable=False, default=0)
     duration_days = Column(Integer, nullable=False)
 
     def __repr__(self) -> str:
-        return f"<Tariff id={self.id} name={self.name} price={self.price} duration_days={self.duration_days}>"
+        return f"<Tariff id={self.id} name={self.name} price={self.price} star_price={self.star_price} duration_days={self.duration_days}>"
 
 
 async def create_tariff(
@@ -29,7 +30,7 @@ async def create_tariff(
     """
     Создаёт новый тариф и добавляет его в базу данных.
     """
-    new_tariff = Tariff(name=name, price=price, duration_days=duration_days)
+    new_tariff = Tariff(name=name, price=price, star_price=0, duration_days=duration_days)
     session.add(new_tariff)
     try:
         await session.commit()
@@ -46,6 +47,7 @@ async def update_tariff(
     *,
     name: str | None = None,
     price: int | None = None,
+    star_price: int | None = None,
     duration_days: int | None = None,
 ) -> Tariff | None:
     """
@@ -58,6 +60,8 @@ async def update_tariff(
         tariff.name = name
     if price is not None:
         tariff.price = price
+    if star_price is not None:
+        tariff.star_price = star_price
     if duration_days is not None:
         tariff.duration_days = duration_days
     try:

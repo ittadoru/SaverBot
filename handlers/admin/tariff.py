@@ -120,35 +120,36 @@ async def process_tariff_name(message: Message, state: FSMContext) -> None:
     """Обрабатывает название тарифа и запрашивает длительность, либо парсит всё одной строкой через запятую."""
     raw = (message.text or "").strip()
     parts = [p.strip() for p in raw.split(",")]
-    if len(parts) != 3:
+    if len(parts) not in (3, 4):
         kb = InlineKeyboardBuilder()
         kb.button(text="⬅️ Отмена", callback_data="tariff_menu")
         kb.adjust(1)
         await message.answer(
-            "❗️ <b>Формат: название, дни, цена</b>\nПример: <code>1 год, 365, 349</code>",
+            "❗️ <b>Формат: название, дни, цена, цена_звёздами (опционально)</b>\nПример: <code>1 год, 365, 349, 299</code>",
             parse_mode="HTML",
             reply_markup=kb.as_markup()
         )
         return
-    name, days, price = parts
-    if not name or len(name) > 50 or not days.isdigit() or not price.isdigit():
+    name, days, price = parts[:3]
+    star_price = parts[3] if len(parts) == 4 else price
+    if not name or len(name) > 50 or not days.isdigit() or not price.isdigit() or not star_price.isdigit():
         kb = InlineKeyboardBuilder()
         kb.button(text="⬅️ Отмена", callback_data="tariff_menu")
         kb.adjust(1)
         await message.answer(
-            "❗️ <b>Проверьте формат:</b> название (до 50), дни (целое), цена (целое)\nПример: <code>1 год, 365, 349</code>",
+            "❗️ <b>Проверьте формат:</b> название (до 50), дни (целое), цена (целое), цена_звёздами (целое)\nПример: <code>1 год, 365, 349, 299</code>",
             parse_mode="HTML",
             reply_markup=kb.as_markup()
         )
         return
     async with get_session() as session:
-        await create_tariff(session, name=name, price=int(price), duration_days=int(days))
+        await create_tariff(session, name=name, price=int(price), star_price=int(star_price), duration_days=int(days))
     logger.info(
-        "Админ %d создал новый тариф (одной строкой): %s, %s дней, %s ⭐️",
-        message.from_user.id, name, days, price
+        "Админ %d создал новый тариф: %s, %s дней, %s ₽, %s ⭐️",
+        message.from_user.id, name, days, price, star_price
     )
     await message.answer(
-        f"✅ <b>Тариф «{name}» успешно добавлен!</b>\nДлительность: <b>{days}</b> дней\nЦена: <b>{price} ₽</b>",
+        f"✅ <b>Тариф «{name}» успешно добавлен!</b>\nДлительность: <b>{days}</b> дней\nЦена: <b>{price} ₽</b>\nЦена звёздами: <b>{star_price} ⭐️</b>",
         parse_mode="HTML"
     )
     await state.clear()
@@ -181,6 +182,7 @@ async def edit_tariff_field_select(callback: CallbackQuery, state: FSMContext) -
     kb.button(text="📝 Имя", callback_data="edit_field:name")
     kb.button(text="📅 Дни", callback_data="edit_field:days")
     kb.button(text="💰 Цена", callback_data="edit_field:price")
+    kb.button(text="⭐️ Цена звёздами", callback_data="edit_field:star_price")
     kb.button(text="⬅️ Назад в меню", callback_data="tariff_menu")
     kb.adjust(2, 2, 1)
     await callback.message.edit_text(
@@ -198,6 +200,7 @@ async def edit_tariff_start(callback: CallbackQuery, state: FSMContext) -> None:
         "name": "<b>Введите новое имя тарифа:</b>",
         "days": "<b>Введите новую длительность (целое число дней):</b>",
         "price": "<b>Введите новую цену (целое число руб.):</b>",
+        "star_price": "<b>Введите новую цену тарифа в звёздах (целое число):</b>",
     }
     await state.set_state(TariffStates.editing_new_value)
     await callback.message.edit_text(prompt_map[field], parse_mode="HTML")
@@ -241,6 +244,14 @@ async def process_edit_value(message: Message, state: FSMContext) -> None:
             )
             return
         update_kwargs["price"] = int(raw)
+    elif field == "star_price":
+        if not raw.isdigit() or not (0 < int(raw) < 1_000_000):
+            await message.answer(
+                "❗️ <b>Некорректная цена в звёздах. Повторите:</b>",
+                parse_mode="HTML"
+            )
+            return
+        update_kwargs["star_price"] = int(raw)
     else:
         await message.answer(
             "❗️ <b>Неизвестное поле.</b>",

@@ -49,7 +49,7 @@ docker compose down
 docker volume ls 
 # допустим volume называется pgdata
 docker volume rm pgdata
-docker compose run --rm bot bash
+docker compose run --rm app bash
 alembic revision --autogenerate -m "initial"
 alembic upgrade head
 exit

@@ -37,7 +37,7 @@ def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
     # Сортировка тарифов по цене по возрастанию
     for t in sorted(tariffs, key=lambda x: x.price):
         builder.button(
-            text=f"{t.name} — {t.price} ⭐️",
+            text=f"{t.name} — {t.price}₽ / {getattr(t, 'star_price', t.price)}⭐️",
             callback_data=f"{BUY_PREFIX}{t.id}"
         )
     builder.button(text="⬅️ В профиль", callback_data="profile")
@@ -102,18 +102,55 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
         await callback.answer("Тариф не найден.", show_alert=True)
         return
 
+    # Показываем выбор способа оплаты: YooKassa или Stars
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=f"💳 Оплатить {tariff.price}₽ (YooKassa)",
+        callback_data=f"pay_yookassa:{tariff.id}"
+    )
+    builder.button(
+        text=f"⭐️ Оплатить {getattr(tariff, 'star_price', tariff.price)}⭐️ (Telegram Stars)",
+        callback_data=f"pay_stars:{tariff.id}"
+    )
+    builder.button(text="⬅️ Назад", callback_data="subscribe")
+    builder.adjust(1)
+    await callback.message.edit_text(
+        f"<b>Выберите способ оплаты для тарифа <u>{tariff.name}</u>:</b>\n\n" +
+        f"• <b>YooKassa:</b> {tariff.price}₽\n" +
+        f"• <b>Telegram Stars:</b> {getattr(tariff, 'star_price', tariff.price)}⭐️",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+# Новый handler для оплаты через Stars
+@router.callback_query(F.data.startswith("pay_stars:"))
+async def pay_stars_callback_handler(callback: types.CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    try:
+        tariff_id = int(callback.data.split(":", 1)[1])
+    except Exception:
+        await callback.answer("Ошибка тарифа", show_alert=True)
+        return
+
+    async with get_session() as session:
+        tariff = await get_tariff_by_id(session, tariff_id)
+    if not tariff:
+        await callback.answer("Тариф не найден", show_alert=True)
+        return
+
     # Генерируем уникальный payload для каждой оплаты
     unique_id = uuid.uuid4().hex
     payload = f"subscribe_{tariff.id}_{user_id}_{unique_id}"
-    prices = [types.LabeledPrice(label=tariff.name, amount=int(tariff.price))]
+    prices = [types.LabeledPrice(label=tariff.name, amount=int(getattr(tariff, 'star_price', tariff.price)))]
     logger.info(
-        "[STARS] send_invoice: user_id=%s, tariff_id=%s, payload=%s, price=%s, label=%s",
-        user_id, tariff.id, payload, tariff.price, tariff.name
+        "[STARS] send_invoice: user_id=%s, tariff_id=%s, payload=%s, star_price=%s, label=%s",
+        user_id, tariff.id, payload, getattr(tariff, 'star_price', tariff.price), tariff.name
     )
     await callback.bot.send_invoice(
         chat_id=user_id,
         title=f"Подписка: {tariff.name}",
-        description=f"💳 Для оплаты тарифа нажмите на кнопку оплаты",
+        description=f"💳 Для оплаты тарифа звёздами нажмите на кнопку оплаты",
         payload=payload,
         provider_token="STARS",
         currency="XTR",
@@ -125,11 +162,16 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     )
     await callback.answer()
 
+@router.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
+    await pre_checkout_query.answer(ok=True)
+
 @router.message(F.content_type == 'successful_payment')
-async def stars_successful_payment_handler(message: types.Message):
+async def stars_successful_payment_handler(message: types.Message) -> None:
     """Обработка успешной оплаты Stars: продлеваем подписку."""
+    payment = message.successful_payment
     user_id = message.from_user.id
-    payload = message.successful_payment.invoice_payload  # формат: subscribe_{tariff_id}_{user_id}_{uuid}
+    payload = payment.invoice_payload  # формат: subscribe_{tariff_id}_{user_id}_{uuid}
     try:
         if payload.startswith("subscribe_"):
             parts = payload.split("_")
@@ -152,10 +194,10 @@ async def stars_successful_payment_handler(message: types.Message):
         "[STARS] successful_payment: user_id=%s, payload=%s, total_amount=%s, currency=%s, telegram_payment_charge_id=%s, provider_payment_charge_id=%s",
         user_id,
         payload,
-        message.successful_payment.total_amount,
-        message.successful_payment.currency,
-        message.successful_payment.telegram_payment_charge_id,
-        message.successful_payment.provider_payment_charge_id
+        payment.total_amount,
+        payment.currency,
+        payment.telegram_payment_charge_id,
+        payment.provider_payment_charge_id
     )
 
     await message.answer(
@@ -174,8 +216,8 @@ async def stars_successful_payment_handler(message: types.Message):
             f"🆔 <code>{user.id}</code>\n"
             f"🏷️ {tariff.name}\n"
             f"⏳ {tariff.duration_days} дн.\n"
-            f"💳 Telegram ID: <code>{message.successful_payment.telegram_payment_charge_id}</code>\n"
-            f"💳 Provider ID: <code>{message.successful_payment.provider_payment_charge_id}</code>\n"
+            f"💳 Telegram ID: <code>{payment.telegram_payment_charge_id}</code>\n"
+            f"💳 Provider ID: <code>{payment.provider_payment_charge_id}</code>\n"
         ),
         parse_mode="HTML",
         message_thread_id=SUBSCRIBE_TOPIC_ID,
