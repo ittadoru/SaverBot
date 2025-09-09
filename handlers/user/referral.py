@@ -10,7 +10,7 @@ from db.base import get_session
 from sqlalchemy import select, func
 
 import config
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 router = Router()
 
@@ -29,12 +29,11 @@ async def get_referral_text(user_id: int) -> str:
     return REFERRAL_LINK_TEXT.format(count=count, ref_gift=config.REF_GIFT_DAYS)
 
 def referral_keyboard(ref_link: str):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔗 Пригласить друга", switch_inline_query=ref_link)],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
-        ]
-    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔗 Пригласить друга", switch_inline_query=ref_link)
+    builder.button(text="⬅️ Назад", callback_data="profile")
+    builder.adjust(1)
+    return builder.as_markup()
 
 @router.callback_query(F.data == "invite_friend")
 async def invite_friend_callback(callback: CallbackQuery, bot: Bot):
