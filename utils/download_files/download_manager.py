@@ -46,7 +46,7 @@ async def check_download_permissions(user_id: int):
     limit = DAILY_DOWNLOAD_LIMITS.get(level)
 
     # Проверка дневного лимита
-    if not sub and limit is not None and daily >= limit:
+    if limit is not None and daily >= limit:
         return False, f"⚠️ Лимит {limit} скачиваний в день. Оформите подписку для безлимита."
 
     # Проверка подписки на каналы
