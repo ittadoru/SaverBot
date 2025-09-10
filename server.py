@@ -73,9 +73,10 @@ async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
     """Обработка webhook YooKassa (без логирования raw JSON) (1,16)."""
     bot: Bot = app.state.bot
     admin_errors: list[str] = []  # (15) агрегируем ошибки
-    logger.info("WEBHOOK RAW BODY: %s", request.json())
+    logger.info("WEBHOOK RAW BODY: %s", await request.json())
     try:
         data: dict[str, Any] = await request.json()
+        logger.info("🚀 [WEBHOOK] start: %s", data)
     except JSONDecodeError as e:  # (6) узкий except
         logger.error("❌ [WEBHOOK] Некорректный JSON в webhook: %s", e)
         raise HTTPException(status_code=400, detail="Invalid JSON") from e
