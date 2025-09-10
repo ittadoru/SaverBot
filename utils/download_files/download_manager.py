@@ -10,7 +10,7 @@ from db.base import get_session
 from db.subscribers import is_subscriber
 from db.downloads import get_daily_downloads
 from db.users import log_user_activity, add_or_update_user
-from db.channels import is_channel_guard_enabled, get_required_active_channels, check_user_memberships
+from db.channels import is_channel_guard_enabled, get_required_active_channels
 from db.platforms import increment_platform_download
 from handlers.user.referral import get_referral_stats
 from config import DAILY_DOWNLOAD_LIMITS, DOWNLOAD_FILE_LIMIT
@@ -65,14 +65,14 @@ async def get_max_filesize_mb(level: int, sub: bool) -> int:
     """Определение максимального размера файла в зависимости от уровня и подписки."""
 
     if sub:
-        return DOWNLOAD_FILE_LIMIT * 20
+        return DOWNLOAD_FILE_LIMIT * 10
     
     if level == 1:
         return DOWNLOAD_FILE_LIMIT
     elif level == 2:
-        return DOWNLOAD_FILE_LIMIT * 3
+        return DOWNLOAD_FILE_LIMIT * 2
     elif level == 3:
-        return DOWNLOAD_FILE_LIMIT * 5
+        return DOWNLOAD_FILE_LIMIT * 4
     else:
         return DOWNLOAD_FILE_LIMIT * 10
 

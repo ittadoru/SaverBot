@@ -37,7 +37,7 @@ def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
     # Сортировка тарифов по цене по возрастанию
     for t in sorted(tariffs, key=lambda x: x.price):
         builder.button(
-            text=f"{t.name} — {t.price}₽ / {getattr(t, 'star_price', t.price)}⭐️",
+            text=f"{t.name} — {getattr(t, 'star_price', t.price)}⭐️",
             callback_data=f"{BUY_PREFIX}{t.id}"
         )
     builder.button(text="⬅️ В профиль", callback_data="profile")

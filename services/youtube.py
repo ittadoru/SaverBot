@@ -10,14 +10,16 @@ from __future__ import annotations
 import os
 import uuid
 import asyncio
+from handlers.user.referral import get_referral_stats
 from pytubefix import YouTube
 import re 
 
+from utils.download_files.download_manager import get_max_filesize_mb
 from utils.logger import get_logger
 from db.subscribers import is_subscriber as db_is_subscriber
 from db.base import get_session
 from .base import BaseDownloader
-from config import DOWNLOAD_DIR, DOWNLOAD_FILE_LIMIT
+from config import DOWNLOAD_DIR
 
 
 logger = get_logger(__name__, platform="youtube")
@@ -147,12 +149,16 @@ class YTDLPDownloader(BaseDownloader):
         if stream:
             filesize_bytes = stream.filesize
             filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
-
+            _, level, _ = await get_referral_stats(session, user_id)
+            max_filesize_mb = await get_max_filesize_mb(level, is_sub)
             is_sub = False
+
             if user_id is not None and isinstance(user_id, int):
                 async with get_session() as session:
                     is_sub = await db_is_subscriber(session, user_id)
-            if not is_sub and filesize_mb > DOWNLOAD_FILE_LIMIT:
+
+
+            if not is_sub and filesize_mb > max_filesize_mb:
                 return ("DENIED_SIZE", f"{filesize_mb:.1f}")
 
             def run_download():
