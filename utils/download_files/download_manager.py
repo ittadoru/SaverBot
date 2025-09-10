@@ -13,7 +13,7 @@ from db.users import log_user_activity, add_or_update_user
 from db.channels import is_channel_guard_enabled, get_required_active_channels
 from db.platforms import increment_platform_download
 from handlers.user.referral import get_referral_stats
-from config import DAILY_DOWNLOAD_LIMITS
+from config import DAILY_DOWNLOAD_LIMITS, SUBSCRIBER_DAILY_LIMIT
 from utils.get_file_max_mb import get_max_filesize_mb
 
 logger = logging.getLogger(__name__)
@@ -43,11 +43,13 @@ async def check_download_permissions(user_id: int):
         guard_on = await is_channel_guard_enabled(session)
         required_channels = await get_required_active_channels(session) if guard_on and not is_vip else []
 
-    limit = DAILY_DOWNLOAD_LIMITS.get(level)
+    if sub:
+        limit = SUBSCRIBER_DAILY_LIMIT
+    else:
+        limit = DAILY_DOWNLOAD_LIMITS.get(level)
 
-    # Проверка дневного лимита
     if limit is not None and daily >= limit:
-        return False, f"⚠️ Лимит {limit} скачиваний в день. Оформите подписку для безлимита."
+        return False, f"⚠️ Лимит {limit} скачиваний в день."
 
     # Проверка подписки на каналы
     if required_channels:
