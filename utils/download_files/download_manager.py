@@ -13,7 +13,8 @@ from db.users import log_user_activity, add_or_update_user
 from db.channels import is_channel_guard_enabled, get_required_active_channels
 from db.platforms import increment_platform_download
 from handlers.user.referral import get_referral_stats
-from config import DAILY_DOWNLOAD_LIMITS, DOWNLOAD_FILE_LIMIT
+from config import DAILY_DOWNLOAD_LIMITS
+from utils.get_file_max_mb import get_max_filesize_mb
 
 logger = logging.getLogger(__name__)
 BUSY_KEY = "busy"
@@ -58,24 +59,6 @@ async def check_download_permissions(user_id: int):
         return False, "\n".join(lines)
 
     return True, ""
-
-
-# ---------------- Размеры файлов ----------------
-async def get_max_filesize_mb(level: int, sub: bool) -> int:
-    """Определение максимального размера файла в зависимости от уровня и подписки."""
-
-    if sub:
-        return DOWNLOAD_FILE_LIMIT * 10
-    
-    if level == 1:
-        return DOWNLOAD_FILE_LIMIT
-    elif level == 2:
-        return DOWNLOAD_FILE_LIMIT * 2
-    elif level == 3:
-        return DOWNLOAD_FILE_LIMIT * 4
-    else:
-        return DOWNLOAD_FILE_LIMIT * 10
-
 
 # ---------------- Скачивание ----------------
 async def process_youtube_or_other(

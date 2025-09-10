@@ -14,7 +14,7 @@ from handlers.user.referral import get_referral_stats
 from pytubefix import YouTube
 import re 
 
-from utils.download_files.download_manager import get_max_filesize_mb
+from utils.get_file_max_mb import get_max_filesize_mb
 from utils.logger import get_logger
 from db.subscribers import is_subscriber as db_is_subscriber
 from db.base import get_session
