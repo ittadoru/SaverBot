@@ -71,11 +71,12 @@ def _calc_expiry(days: int) -> datetime:
 @app.post("/yookassa")
 async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
     """Обработка webhook YooKassa (без логирования raw JSON) (1,16)."""
+    logger.info("WEBHOOK RAW BODY: %s", await request.json())
     bot: Bot = app.state.bot
     admin_errors: list[str] = []  # (15) агрегируем ошибки
-    logger.info("WEBHOOK RAW BODY: %s", await request.json())
     try:
         data: dict[str, Any] = await request.json()
+        logger.info("WEBHOOK RAW BODY: %s", data)
         logger.info("🚀 [WEBHOOK] start: %s", data)
     except JSONDecodeError as e:  # (6) узкий except
         logger.error("❌ [WEBHOOK] Некорректный JSON в webhook: %s", e)
