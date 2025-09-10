@@ -8,7 +8,7 @@ from utils.download_files.video_utils import get_video_resolution
 from utils.download_files.send import send_video, send_audio
 from db.base import get_session
 from db.subscribers import is_subscriber
-from db.downloads import get_daily_downloads
+from db.downloads import get_daily_downloads, increment_daily_download, get_or_create_total_download
 from db.users import log_user_activity, add_or_update_user
 from db.channels import is_channel_guard_enabled, get_required_active_channels
 from db.platforms import increment_platform_download
@@ -120,6 +120,10 @@ async def process_youtube_or_other(
                 getattr(message.from_user, "username", None),
             )
             await log_user_activity(session, user_id)
+            await increment_daily_download(session, user_id)
+            total_row = await get_or_create_total_download(session, user_id)
+            total_row.total += 1
+            await session.commit()
             await increment_platform_download(session, user_id, platform)
 
     except Exception as e:
