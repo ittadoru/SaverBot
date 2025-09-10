@@ -104,10 +104,10 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
 
     # Показываем выбор способа оплаты: YooKassa или Stars
     builder = InlineKeyboardBuilder()
-    builder.button(
-        text=f"💳 Оплатить {tariff.price} RUB",
-        callback_data=f"pay_yookassa:{tariff.id}"
-    )
+    # builder.button(
+    #     text=f"💳 Оплатить {tariff.price} RUB",
+    #     callback_data=f"pay_yookassa:{tariff.id}"
+    # )
     builder.button(
         text=f"⭐️ Оплатить звездами {getattr(tariff, 'star_price', tariff.price)})",
         callback_data=f"pay_stars:{tariff.id}"
