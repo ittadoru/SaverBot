@@ -109,7 +109,7 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     #     callback_data=f"pay_yookassa:{tariff.id}"
     # )
     builder.button(
-        text=f"⭐️ Оплатить звездами {getattr(tariff, 'star_price', tariff.price)})",
+        text=f"⭐️ Оплатить звездами {getattr(tariff, 'star_price', tariff.price)}",
         callback_data=f"pay_stars:{tariff.id}"
     )
     builder.button(text="⬅️ Назад", callback_data="subscribe")
