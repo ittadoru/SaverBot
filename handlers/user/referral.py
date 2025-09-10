@@ -30,7 +30,8 @@ async def get_referral_text(user_id: int) -> str:
 
 def referral_keyboard(ref_link: str):
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔗 Пригласить друга", switch_inline_query=ref_link)
+    # Кнопка теперь копирует только ссылку, без username
+    builder.button(text="🔗 Пригласить друга", switch_inline_query_current_chat=ref_link)
     builder.button(text="⬅️ Назад", callback_data="profile")
     builder.adjust(1)
     return builder.as_markup()
