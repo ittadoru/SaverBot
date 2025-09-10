@@ -45,10 +45,8 @@ async def download_handler(message: types.Message, state: FSMContext):
                 parse_mode="HTML",
             )
 
-        await wait_message.delete()
-
-        # остальные платформы — сразу качаем
         await process_youtube_or_other(message, url, user.id, platform, state)
+        await wait_message.delete()
 
     except Exception as e:
         logger.error(f"❌ Ошибка в download_handler: {e}", exc_info=True)
@@ -60,16 +58,22 @@ async def download_handler(message: types.Message, state: FSMContext):
 @router.callback_query(lambda c: c.data.startswith("ytres:"))
 async def ytres_callback_handler(callback: types.CallbackQuery, state: FSMContext):
     """Выбор разрешения YouTube-видео."""
-    _, itag = callback.data.split(":", 1)
-    user = callback.from_user
-
+    if await is_busy(state):
+        await callback.answer("⏳ Уже выполняется другая загрузка.", show_alert=True)
+        return
     await set_busy(state, True)
-    await callback.message.answer("⏳ Скачиваем видео, подождите пару минут...")
-
-    data = await state.get_data()
-    url = data.get("yt_url")
-
-    await process_youtube_or_other(callback.message, url, user.id, "youtube", state, itag)
+    try:
+        _, itag = callback.data.split(":", 1)
+        await callback.message.answer("⏳ Скачиваем видео, подождите пару минут...")
+        data = await state.get_data()
+        url = data.get("yt_url")
+        user = callback.from_user
+        await process_youtube_or_other(callback.message, url, user.id, "youtube", state, itag)
+    except Exception as e:
+        logger.error(f"❌ Ошибка в ytres_callback_handler: {e}", exc_info=True)
+        await callback.answer("❗️ Ошибка при скачивании, попробуйте позже.", show_alert=True)
+    finally:
+        await set_busy(state, False)
 
 @router.callback_query(lambda c: c.data == "disabled")
 async def yt_disabled_callback_handler(callback: types.CallbackQuery, state: FSMContext):
