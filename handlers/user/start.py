@@ -4,6 +4,7 @@
 import logging
 
 import random
+from typing import Optional
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
@@ -44,40 +45,7 @@ async def _generate_unique_promocode(session, tries: int = PROMO_MAX_TRIES) -> s
     )
     return None
 
-# --- вспомогатели для работы с контекстом (Message или CallbackQuery) ---
-def _is_callback(ctx) -> bool:
-    return isinstance(ctx, types.CallbackQuery)
-
-def _get_message(ctx) -> types.Message:
-    return ctx.message if _is_callback(ctx) else ctx
-
-async def send_or_edit(
-    ctx,
-    text: str,
-    reply_markup=None,
-    parse_mode: str | None = None,
-    edit_if_callback: bool = True,
-):
-    """
-    Если ctx — CallbackQuery и edit_if_callback=True -> пытаемся редактировать callback.message
-    Иначе — отправляем новое сообщение через message.answer()
-    """
-    msg = _get_message(ctx)
-    if _is_callback(ctx) and edit_if_callback:
-        try:
-            # пробуем редактировать существующее сообщение
-            await msg.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
-        except Exception:
-            # если редактирование не удалось (например, MessageNotModified, или устарело) —
-            # fallback: отправим новое сообщение
-            await msg.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
-    else:
-        await msg.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
-
-
-# --- функции из предыдущего рефакторинга, адаптированные для ctx ---
-def parse_ref_args(ctx, user_id: int):
-    message = _get_message(ctx)
+def parse_ref_args(message: types.Message, user_id: int) -> Optional[int]:
     args = message.get_args() if hasattr(message, "get_args") else ""
     if not args and message.text:
         parts = message.text.split(maxsplit=1)
@@ -94,8 +62,7 @@ def parse_ref_args(ctx, user_id: int):
     return None
 
 
-async def register_user(session, ctx, referrer_id: int | None):
-    message = _get_message(ctx)
+async def register_user(session, message: types.Message, referrer_id: Optional[int]):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
     username = message.from_user.username
@@ -117,129 +84,81 @@ async def register_user(session, ctx, referrer_id: int | None):
     return is_new, promo_code
 
 
-async def process_referral_bonus(session, ctx, user_id: int, referrer_id: int):
-    message = _get_message(ctx)
+async def process_referral_bonus(session, message: types.Message, user_id: int, referrer_id: int):
     try:
-        # уведомляем нового
         await message.answer("Ты получил бонус за реферала! (3 дня подписки)")
         await add_subscriber_with_duration(session, user_id, REF_GIFT_DAYS)
 
-        # уведомляем реферера и начисляем
         await message.bot.send_message(referrer_id, "Ты получил бонус за реферала! (3 дня подписки)")
         await add_subscriber_with_duration(session, referrer_id, REF_GIFT_DAYS)
-        logger.info(f"🎁 [START] Начислен бонус (+3 дня) подписки рефереру {referrer_id} за нового пользователя {user_id}")
+        logger.info(f"🎁 [START] Начислен бонус рефереру {referrer_id} за нового пользователя {user_id}")
 
         ref_count, level, _ = await get_referral_stats(session, referrer_id)
 
-        # уровни
         if ref_count == 30:
             await add_subscriber_with_duration(session, referrer_id, SUBSCRIPTION_LIFETIME_DAYS)
-            try:
-                await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 5 уровня (30 рефералов) и получили бессрочную подписку!")
-            except Exception:
-                pass
-            logger.info(f"🏆 [REFERAL] Реферер {referrer_id} получил бессрочную подписку за 5 уровень ({ref_count} рефералов)")
+            await message.bot.send_message(referrer_id, "🎉 Поздравляем! Бессрочная подписка!")
         elif ref_count == 10:
-            try:
-                await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 4 уровня (10 рефералов) и получили VIP-статус!")
-            except Exception:
-                pass
-            logger.info(f"⭐️ [REFERAL] Реферер {referrer_id} стал VIP за 4 уровень ({ref_count} рефералов)")
+            await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы стали VIP!")
         elif ref_count == 3:
-            try:
-                await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 3 уровня (3 реферала) и улучшили лимиты!")
-            except Exception:
-                pass
-            logger.info(f"🥉 [REFERAL] Реферер {referrer_id} получил бонус за 3 уровень ({ref_count} рефералов)")
+            await message.bot.send_message(referrer_id, "🎉 3 уровень! Лимиты увеличены!")
         elif ref_count == 1:
-            try:
-                await message.bot.send_message(referrer_id, "🎉 Поздравляем! Вы достигли 2 уровня (1 реферал) и улучшили лимиты!")
-            except Exception:
-                pass
-            logger.info(f"🥈 [REFERAL] Реферер {referrer_id} получил бонус за 2 уровень ({ref_count} рефералов)")
+            await message.bot.send_message(referrer_id, "🎉 2 уровень! Лимиты улучшены!")
 
     except Exception as e:
-        logger.error(f"❌ [START] Ошибка при начислении бонуса рефереру {referrer_id}: {e}")
+        logger.error(f"❌ Ошибка при бонусе рефереру {referrer_id}: {e}")
 
 
-async def send_welcome_message(ctx, promo_code: str | None):
-    # промо — обычно хотим отправить отдельным сообщением, поэтому edit_if_callback=False
+async def send_welcome_message(message: types.Message, promo_code: Optional[str]):
     if promo_code:
         promo_text = (
-            f"Подарок новому пользователю, промокод на {PROMO_DURATION_DAYS} дней подписки:\n"
+            f"Подарок новому пользователю: промокод на {PROMO_DURATION_DAYS} дней подписки:\n"
             f"<pre>{promo_code}</pre>\nАктивируй его через меню профиля.\n\n"
         )
-        await send_or_edit(ctx, promo_text, parse_mode="HTML", edit_if_callback=False)
+        await message.answer(promo_text, parse_mode="HTML")
 
 
-async def notify_support_group(bot, user_id: int, username_raw: str, referrer_id: int | None):
-    try:
-        await bot.send_message(
-            SUPPORT_GROUP_ID,
-            text=f"👤 Новый пользователь\n\nID: {user_id}\nИмя: {username_raw}\nРеферал: {referrer_id}",
-            message_thread_id=NEW_USER_TOPIC_ID,
-        )
-    except Exception:
-        logger.exception("Не удалось отправить уведомление в поддержку")
-
-
-async def show_main_menu(ctx):
-    message = _get_message(ctx)
-    await send_or_edit(
-        ctx,
-        MAIN_MENU_TEXT.format(username=message.from_user.username),
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="HTML",
-        edit_if_callback=True,  # при callback'е — редактировать текущее сообщение
+async def notify_support_group(bot, user_id: int, username_raw: str, referrer_id: Optional[int]):
+    await bot.send_message(
+        SUPPORT_GROUP_ID,
+        text=f"👤 Новый пользователь\n\nID: {user_id}\nИмя: {username_raw}\nРеферал: {referrer_id}",
+        message_thread_id=NEW_USER_TOPIC_ID,
     )
 
 
-# ================== единый flow для /start и callback_data="start" ==================
+async def show_main_menu(message: types.Message):
+    await message.answer(
+        MAIN_MENU_TEXT.format(username=message.from_user.username),
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+# ================== Основные хендлеры ==================
 @router.message(Command("start"))
-async def cmd_start_message(message: types.Message):
-    # вызываем единый flow; для обычной команды редактируем не будем
-    await start_flow(message)
-
-
-@router.callback_query(F.data == "start")
-async def cmd_start_callback(callback: types.CallbackQuery):
-    # вызываем единый flow; для callback'а будем редактировать сообщение
-    await start_flow(callback)
-    # обязательно answer() чтобы убрать "крутилку" в клиенте
-    try:
-        await callback.answer()
-    except Exception:
-        pass
-
-@router.callback_query()
-async def debug_all_callbacks(callback: types.CallbackQuery):
-    print("DEBUG CALLBACK:", callback.data)
-    await callback.answer()
-
-async def start_flow(ctx):
-    """
-    ctx: types.Message | types.CallbackQuery
-    общая логика регистрации / начислений / показа меню
-    """
-    message = _get_message(ctx)
+async def cmd_start(message: types.Message):
     user_id = message.from_user.id
     username_raw = message.from_user.username or message.from_user.full_name
 
-    # парсим реферала из того сообщения, откуда пришёл запрос
-    referrer_id = parse_ref_args(ctx, user_id)
+    referrer_id = parse_ref_args(message, user_id)
 
     bot_user = await message.bot.get_me()
     if user_id == bot_user.id:
         return
 
     async with get_session() as session:
-        is_new, promo_code = await register_user(session, ctx, referrer_id)
+        is_new, promo_code = await register_user(session, message, referrer_id)
 
         if is_new and referrer_id:
-            await process_referral_bonus(session, ctx, user_id, referrer_id)
+            await process_referral_bonus(session, message, user_id, referrer_id)
 
         if is_new:
-            await send_welcome_message(ctx, promo_code)
+            await send_welcome_message(message, promo_code)
             await notify_support_group(message.bot, user_id, username_raw, referrer_id)
 
-    await show_main_menu(ctx)
+    await show_main_menu(message)
+
+@router.callback_query(F.data == "start")
+async def callback_start(callback: types.CallbackQuery):
+    await cmd_start(callback.message)
+    await callback.answer()
