@@ -4,7 +4,7 @@ import logging
 import random
 from typing import Optional, Union
 
-from aiogram import F, Router, types
+from aiogram import F, Router, types, Bot
 from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message, CallbackQuery
@@ -68,7 +68,7 @@ async def register_user(session, user_id: int, first_name: str, username: str, r
     return is_new, promo_code
 
 
-async def process_referral_bonus(session, user_id: int, referrer_id: int, bot: types.Bot):
+async def process_referral_bonus(session, user_id: int, referrer_id: int, bot: Bot):
     try:
         await bot.send_message(user_id, "Ты получил бонус за реферала! (3 дня подписки)")
         await add_subscriber_with_duration(session, user_id, REF_GIFT_DAYS)
@@ -91,7 +91,7 @@ async def process_referral_bonus(session, user_id: int, referrer_id: int, bot: t
         logger.error(f"❌ Ошибка при бонусе рефереру {referrer_id}: {e}")
 
 
-async def send_welcome_message(user_id: int, promo_code: Optional[str], bot: types.Bot):
+async def send_welcome_message(user_id: int, promo_code: Optional[str], bot: Bot):
     if promo_code:
         promo_text = (
             f"Подарок новому пользователю: промокод на {PROMO_DURATION_DAYS} дней подписки:\n"
@@ -100,7 +100,7 @@ async def send_welcome_message(user_id: int, promo_code: Optional[str], bot: typ
         await bot.send_message(user_id, promo_text, parse_mode="HTML")
 
 
-async def notify_support_group(bot: types.Bot, user_id: int, username_raw: str, referrer_id: Optional[int]):
+async def notify_support_group(bot: Bot, user_id: int, username_raw: str, referrer_id: Optional[int]):
     await bot.send_message(
         SUPPORT_GROUP_ID,
         text=f"👤 Новый пользователь\n\nID: {user_id}\nИмя: {username_raw}\nРеферал: {referrer_id}",
