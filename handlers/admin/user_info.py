@@ -112,7 +112,7 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
 
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="🗑️ Удалить пользователя",
+        text="🗑️ Удалить",
         callback_data=UserCallback(action="delete", user_id=user.id).pack(),
     )
     builder.button(text="⬅️ Назад к списку", callback_data="manage_users")

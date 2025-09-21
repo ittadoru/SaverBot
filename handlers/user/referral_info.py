@@ -36,6 +36,6 @@ async def referral_info_handler(callback: types.CallbackQuery) -> None:
     )
 
     await callback.message.edit_text(
-        referral_text, reply_markup=back_button("profile"), parse_mode="HTML"
+        referral_text, reply_markup=back_button("start"), parse_mode="HTML"
     )
     await callback.answer()

@@ -19,7 +19,7 @@ def _build_profile_keyboard() -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(
         inline_keyboard=[
             [types.InlineKeyboardButton(text="💳 Купить подписку", callback_data="subscribe")],
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="start")],
         ]
     )
 

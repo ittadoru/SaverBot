@@ -17,5 +17,5 @@ async def show_download_history(callback: CallbackQuery):
         text = "У вас пока нет истории скачиваний."
     else:
         text = "<b>🕓 Последние 5 скачиваний:</b>\n" + "\n".join(f"<pre>{url}</pre>" for url in links)
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_button("profile"))
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_button("start"))
     await callback.answer()

@@ -40,6 +40,6 @@ def get_about_keyboard():
     """Клавиатура: Подробнее о рефералах + Назад в профиль."""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="start")
     )
     return builder.as_markup()

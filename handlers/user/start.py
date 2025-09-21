@@ -15,7 +15,7 @@ from db.users import add_or_update_user, is_user_exists, log_user_activity
 from db.subscribers import add_subscriber_with_duration
 from handlers.user.referral import get_referral_stats
 from config import SUBSCRIPTION_LIFETIME_DAYS, SUPPORT_GROUP_ID, NEW_USER_TOPIC_ID
-
+from handlers.user.menu import MAIN_MENU_TEXT, get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ async def cmd_start(message: types.Message) -> None:
         if promo_code:
             promo_text = (
                 f"Подарок новому пользователю, промокод на {PROMO_DURATION_DAYS} дней подписки: "
-                f"<pre>{promo_code}</pre>\nАктивируй его через меню профиля (/profile).\n\n"
+                f"<pre>{promo_code}</pre>\nАктивируй его через меню профиля.\n\n"
             )
         else:
             promo_text = ""
@@ -152,10 +152,11 @@ async def cmd_start(message: types.Message) -> None:
         )
 
     await message.answer(
-        (
-            f"👋 Привет, {username_display}!\n\n"
-            f"{promo_text}"
-            "👤 Твой <b>профиль</b> со статистикой и лимитами всегда доступен через меню по команде /profile."
-        ),
+        promo_text,
         parse_mode="HTML",
+    )
+    await message.answer(
+        MAIN_MENU_TEXT.format(username=message.from_user.username),
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode="HTML"
     )
