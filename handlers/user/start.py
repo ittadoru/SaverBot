@@ -4,10 +4,10 @@
 import logging
 
 import random
-from typing import Optional
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
+from aiogram.exceptions import TelegramBadRequest
 
 from db.base import get_session
 from db.promocodes import add_promocode, get_promocode
@@ -204,13 +204,15 @@ async def cmd_start_message(message: types.Message):
 
 @router.callback_query(F.data == "start")
 async def cmd_start_callback(callback: types.CallbackQuery):
-    # вызываем единый flow; для callback'а будем редактировать сообщение
-    await start_flow(callback)
-    # обязательно answer() чтобы убрать "крутилку" в клиенте
     try:
+        await start_flow(callback)   # твоя функция
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e).lower():
+            await callback.answer("Ты уже на главной 👌", show_alert=False)
+        else:
+            raise
+    else:
         await callback.answer()
-    except Exception:
-        pass
 
 
 async def start_flow(ctx):
