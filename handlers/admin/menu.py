@@ -16,21 +16,21 @@ def get_admin_menu_keyboard():
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="📊 Статистика", callback_data="stats"))
     builder.row(InlineKeyboardButton(text="👥 Пользователи", callback_data="manage_users"))
-    builder.row(InlineKeyboardButton(text="🎟 Промокоды", callback_data="promocode_menu"))
-    builder.row(InlineKeyboardButton(text="🗑️ Очистить downloads", callback_data="clear_downloads"))
     builder.row(
         InlineKeyboardButton(text="💳 Тарифы", callback_data="tariff_menu"),
-        InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu")
+        InlineKeyboardButton(text="🎟 Промокоды", callback_data="promocode_menu")
     )
     builder.row(
         InlineKeyboardButton(text="📦 Логи", callback_data="get_logs"),
-        InlineKeyboardButton(text="📊 Таблицы", callback_data="export_table_menu")
+        InlineKeyboardButton(text="📊 Таблицы", callback_data="export_table_menu"),
+        InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu")
     )
     builder.row(
         InlineKeyboardButton(text="📨 Обычная", callback_data="broadcast_start"),
         InlineKeyboardButton(text="💸 Реклама", callback_data="ad_broadcast_start"),
         InlineKeyboardButton(text="🎯 Новички", callback_data="trial_broadcast_start")
     )
+    builder.row(InlineKeyboardButton(text="🗑️ Очистить downloads", callback_data="clear_downloads"))
     return builder.as_markup()
 
 @router.message(Command("admin"))

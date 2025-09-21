@@ -3,7 +3,7 @@
 """
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 router = Router()
@@ -38,21 +38,3 @@ MAIN_MENU_TEXT = (
     "<b>•</b> Поддержка и статистика всегда под рукой\n\n"
     "Выбери нужный раздел ниже!"
 )
-
-@router.message(F.text == "/profile")
-async def show_main_menu(message: Message):
-    """Показывает главное меню пользователю по команде /profile."""
-    await message.answer(
-        MAIN_MENU_TEXT.format(username=message.from_user.username),
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="HTML"
-    )
-
-@router.callback_query(lambda c: c.data == "profile")
-async def show_profile(callback: CallbackQuery):
-    """Обработчик для кнопки 'Мой профиль'."""
-    await callback.message.edit_text(
-        MAIN_MENU_TEXT.format(username=callback.from_user.username),
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="HTML"
-    )

@@ -77,11 +77,11 @@ async def show_archived_logs_menu(callback: CallbackQuery):
             text=display_name,
             callback_data=LogCallback(filename=filename).pack()
         )
-    builder.adjust(1)
+    builder.adjust(3)
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="get_logs"))
 
     await callback.message.edit_text(
-        "�️ <b>Архивные логи</b>\n\nВыберите дату:",
+        "🗂️ <b>Архивные логи</b>\n\nВыберите дату:",
         reply_markup=builder.as_markup(),
         parse_mode="HTML"
     )
