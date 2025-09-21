@@ -138,10 +138,10 @@ async def cmd_start(message: types.Message) -> None:
                 f"Подарок новому пользователю, промокод на {PROMO_DURATION_DAYS} дней подписки: "
                 f"<pre>{promo_code}</pre>\nАктивируй его через меню профиля.\n\n"
             )
-        else:
-            promo_text = ""
-    else:
-        promo_text = ""
+            await message.answer(
+                promo_text,
+                parse_mode="HTML",
+            )
 
     if is_new:
         logger.info("👤 [START] Новый пользователь %s (id=%s, referrer_id=%s) зарегистрирован", username_raw, user_id, referrer_id)
@@ -151,10 +151,7 @@ async def cmd_start(message: types.Message) -> None:
             message_thread_id=NEW_USER_TOPIC_ID
         )
 
-    await message.answer(
-        promo_text,
-        parse_mode="HTML",
-    )
+    
     await message.answer(
         MAIN_MENU_TEXT.format(username=message.from_user.username),
         reply_markup=get_main_menu_keyboard(),
