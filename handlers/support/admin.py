@@ -61,12 +61,11 @@ async def admin_close_ticket_handler(event) -> None:
             user_id,
             topic_id,
         )
-
 @router.message()
 async def admin_reply_handler(message: Message) -> None:
     """
     Обрабатывает ответы администраторов в темах поддержки.
-    Пересылает сообщение пользователя, если тикет открыт.
+    Пересылает сообщение пользователю с текстом 'Ответ поддержки'.
     """
     if message.from_user.is_bot:
         return
@@ -75,19 +74,22 @@ async def admin_reply_handler(message: Message) -> None:
     admin_id = message.from_user.id
 
     async with get_session() as session:
-        ticket: Optional[SupportTicket] = await get_open_ticket_by_topic_id(
-            session, topic_id
-        )
+        ticket: Optional[SupportTicket] = await get_open_ticket_by_topic_id(session, topic_id)
 
         if not ticket:
             await message.reply("⚠️ Этот тикет уже закрыт. Сообщение не доставлено.")
             return
 
         user_id = ticket.user_id
+        prefix = "💬 Ответ поддержки:\n"
+
         try:
-            await message.copy_to(
-                chat_id=user_id, caption=f"💬 Ответ поддержки:\n{message.caption or ''}"
-            )
+            if message.text or message.caption:  # текстовое сообщение
+                text = prefix + (message.text or message.caption)
+                await message.bot.send_message(user_id, text)
+            else:
+                # медиа, пересылаем с caption
+                await message.copy_to(chat_id=user_id, caption=prefix + (message.caption or ""))
         except Exception as e:
             logger.error(
                 "❌ [SUPPORT] Не удалось доставить сообщение от администратора %d пользователю %d: %s",
