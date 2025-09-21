@@ -2,11 +2,9 @@
 Главное меню пользователя с основными разделами бота (без обработчиков рефералов).
 """
 
-from aiogram import Router, F
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-router = Router()
 
 def get_main_menu_keyboard():
     """Возвращает клавиатуру главного меню пользователя."""
