@@ -203,7 +203,7 @@ async def cmd_start_message(message: types.Message):
 
 
 @router.callback_query(F.data == "start")
-async def cmd_start_callback(callback: CallbackQuery):
+async def cmd_start_callback(callback: types.CallbackQuery):
     # вызываем единый flow; для callback'а будем редактировать сообщение
     await start_flow(callback)
     # обязательно answer() чтобы убрать "крутилку" в клиенте
