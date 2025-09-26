@@ -3,7 +3,7 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 
 from utils.download_files.clean_url import strip_url_after_ampersand
-from utils.platform_detect import detect_platform
+from utils.platform_detect import detect_platform, is_youtube_short
 from utils.download_files.download_manager import (
     is_busy, set_busy, check_download_permissions, process_youtube_or_other
 )
@@ -36,6 +36,11 @@ async def download_handler(message: types.Message, state: FSMContext):
         platform = detect_platform(url)
 
         if platform == "youtube":
+            if is_youtube_short(url):
+                # Если это Shorts, скачиваем сразу без выбора качества
+                await process_youtube_or_other(message, url, user.id, platform, state)
+                return
+
             keyboard, caption, preview = await prepare_youtube_menu(url, user.id)
             await state.update_data({"yt_url": url})
             return await message.answer_photo(
@@ -46,14 +51,12 @@ async def download_handler(message: types.Message, state: FSMContext):
             )
 
         await process_youtube_or_other(message, url, user.id, platform, state)
-        await wait_message.delete()
-
     except Exception as e:
         logger.error(f"❌ Ошибка в download_handler: {e}", exc_info=True)
         await message.answer("❗️ Ошибка при скачивании, попробуйте позже.")
     finally:
         await set_busy(state, False)
-
+        await wait_message.delete()
 
 @router.callback_query(lambda c: c.data.startswith("ytres:"))
 async def ytres_callback_handler(callback: types.CallbackQuery, state: FSMContext):

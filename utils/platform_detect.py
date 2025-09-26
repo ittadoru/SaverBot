@@ -21,3 +21,9 @@ def detect_platform(url: str) -> str:
     except Exception as e:
         logger.exception("❌ [EXCEPTION] Ошибка определения платформы для URL: %s", url)
         return "unknown"
+
+def is_youtube_short(url: str) -> bool:
+    """
+    Проверяет, является ли URL ссылкой на YouTube Shorts.
+    """
+    return "/shorts/" in url
