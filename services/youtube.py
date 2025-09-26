@@ -149,14 +149,15 @@ class YTDLPDownloader(BaseDownloader):
         if stream:
             filesize_bytes = stream.filesize
             filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
-            _, level, _ = await get_referral_stats(session, user_id)
-            max_filesize_mb = await get_max_filesize_mb(level, is_sub)
+            
             is_sub = False
+            max_filesize_mb = 50  # Default value
 
             if user_id is not None and isinstance(user_id, int):
                 async with get_session() as session:
                     is_sub = await db_is_subscriber(session, user_id)
-
+                    _, level, _ = await get_referral_stats(session, user_id)
+                    max_filesize_mb = await get_max_filesize_mb(level, is_sub)
 
             if not is_sub and filesize_mb > max_filesize_mb:
                 return ("DENIED_SIZE", f"{filesize_mb:.1f}")
