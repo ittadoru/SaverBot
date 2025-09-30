@@ -32,7 +32,7 @@ async def main() -> None:
     setup_logger(bot)
     logger.info("Регистрация обработчиков...")
     register_handlers(dp)
-    await crypto_pay.start_polling()
+    
 
     logger.info("Установка команд бота...")
     await set_bot_commands(bot)
@@ -42,7 +42,10 @@ async def main() -> None:
 
     try:
         logger.info("Bot started (polling mode).")
-        await dp.start_polling(bot)
+        await asyncio.gather(
+            dp.start_polling(bot),
+            crypto_pay.start_polling()
+        )
     except asyncio.CancelledError:  # нормальное завершение
         logger.info("Polling cancelled.")
         raise
