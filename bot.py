@@ -4,33 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher
-from aiogram.client.bot import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import Bot
 from aiogram.types import BotCommand
 
-from config import BOT_TOKEN
+from loader import bot, dp
 from handlers import register_handlers
 from utils.logger import setup_logger
 
 logger = logging.getLogger(__name__)
-
-
-def _create_bot() -> Bot:
-    """Создаёт экземпляр бота с HTML parse_mode."""
-    from aiogram.client.telegram import TelegramAPIServer
-    from aiogram.client.session.aiohttp import AiohttpSession
-    
-    if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN не задан")
-    session = AiohttpSession(api=TelegramAPIServer.from_base("http://telegram-bot-api:8081", is_local=True))
-    return Bot(token=BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-
-
-def _create_dispatcher() -> Dispatcher:
-    """Создаёт диспетчер с in-memory хранилищем FSM."""
-    return Dispatcher(storage=MemoryStorage())
 
 
 async def set_bot_commands(bot: Bot):
@@ -47,8 +28,6 @@ async def set_bot_commands(bot: Bot):
 
 async def main() -> None:
     """Настраивает логирование, регистрирует хендлеры и запускает polling."""
-    bot = _create_bot()
-    dp = _create_dispatcher()
 
     setup_logger(bot)
     logger.info("Регистрация обработчиков...")

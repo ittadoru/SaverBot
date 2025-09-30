@@ -12,6 +12,8 @@ from db.base import get_session
 from db.tariff import get_all_tariffs, get_tariff_by_id
 from db.subscribers import add_subscriber_with_duration
 import uuid
+from loader import crypto_pay
+from utils.currency import rub_to_usdt
 
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,7 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
         text=f"⭐️ Оплатить звездами {getattr(tariff, 'star_price', tariff.price)}",
         callback_data=f"pay_stars:{tariff.id}"
     )
+    builder.button(text="💎 Оплатить криптой", callback_data=f"pay_crypto:{tariff_id}")
     builder.button(text="⬅️ Назад", callback_data="subscribe")
     builder.adjust(1)
     await callback.message.edit_text(
@@ -266,3 +269,56 @@ async def stars_successful_payment_handler(message: types.Message) -> None:
         parse_mode="HTML",
         message_thread_id=SUBSCRIBE_TOPIC_ID,
     )
+
+
+@router.callback_query(F.data.startswith("pay_crypto:"))
+async def pay_crypto_callback_handler(callback: types.CallbackQuery) -> None:
+    """Создаёт тестовый крипто-инвойс через CryptoBot и отправляет ссылку на оплату."""
+    user_id = callback.from_user.id
+    try:
+        tariff_id = int(callback.data.split(":", 1)[1])
+    except Exception:
+        await callback.answer("Ошибка тарифа", show_alert=True)
+        return
+
+    async with get_session() as session:
+        tariff = await get_tariff_by_id(session, tariff_id)
+    if not tariff:
+        await callback.answer("Тариф не найден", show_alert=True)
+        return
+
+    # Конвертируем рубли в USDT (минимум 1 USDT)
+    usdt_amount = await rub_to_usdt(tariff.price)
+
+    if usdt_amount is None:
+        logger.error("❌ [SUBSCRIBE] Не удалось получить курс для конвертации в USDT для user=%s", user_id)
+        await callback.message.answer("Не удалось получить актуальный курс валют. Пожалуйста, попробуйте позже.", show_alert=True)
+        await callback.answer()
+        return
+
+    try:
+        invoice = await crypto_pay.create_invoice(
+            asset="USDT",
+            amount=usdt_amount,
+            description=f"Подписка: {tariff.name}",
+            payload=f"{user_id}:{tariff_id}"
+        )
+        pay_url = invoice.bot_invoice_url
+        invoice.poll(message=callback.message)
+    except Exception as e:
+        logger.exception("❌ [SUBSCRIBE] Ошибка создания крипто-инвойса для user=%s tariff=%s", user_id, tariff_id)
+        await callback.message.answer("Ошибка создания крипто-инвойса. Попробуйте позже.", show_alert=True)
+        return
+
+    markup = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text=f"💎 Оплатить {usdt_amount} USDT", url=pay_url)],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="subscribe")]
+        ]
+    )
+    await callback.message.answer(
+        f"Для оплаты тарифа <b>{tariff.name}</b> используйте кнопку ниже. Сумма: <b>{usdt_amount} USDT</b> (конвертация по актуальному курсу)",
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+    await callback.answer()

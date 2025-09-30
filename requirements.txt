@@ -15,3 +15,4 @@ moviepy==2.2.1
 aiofiles==24.1.0
 pytubefix==9.4.1
 Telethon==1.41.2
+aiosend==3.0.1

@@ -20,6 +20,10 @@ DOMAIN = os.getenv("DOMAIN")
 
 DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "downloads")
 
+CMC_API_KEY = os.getenv("CMC_API_KEY")
+RUB_PER_USDT = 90.0
+
+
 DAILY_DOWNLOAD_LIMITS = {
     1: 10,
     2: 15,
