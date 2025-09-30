@@ -19,7 +19,7 @@ from handlers.user.menu import MAIN_MENU_TEXT, get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
-PROMO_DURATION_DAYS = 7
+PROMO_DURATION_DAYS = 10
 PROMO_PREFIX = "WELCOME"
 PROMO_RANDOM_MIN = 100_000
 PROMO_RANDOM_MAX = 999_999

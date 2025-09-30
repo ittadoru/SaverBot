@@ -28,7 +28,7 @@ DAILY_DOWNLOAD_LIMITS = {
     1: 10,
     2: 15,
     3: 20,
-    4: 50,
+    4: 35,
     5: 50,
 }
 SUBSCRIBER_DAILY_LIMIT = 50
