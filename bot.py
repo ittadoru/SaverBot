@@ -7,7 +7,7 @@ import logging
 from aiogram import Bot
 from aiogram.types import BotCommand
 
-from loader import bot, dp
+from loader import bot, dp, crypto_pay
 from handlers import register_handlers
 from utils.logger import setup_logger
 
@@ -28,10 +28,11 @@ async def set_bot_commands(bot: Bot):
 
 async def main() -> None:
     """Настраивает логирование, регистрирует хендлеры и запускает polling."""
-
+    
     setup_logger(bot)
     logger.info("Регистрация обработчиков...")
     register_handlers(dp)
+    crypto_pay.start_polling()
 
     logger.info("Установка команд бота...")
     await set_bot_commands(bot)
