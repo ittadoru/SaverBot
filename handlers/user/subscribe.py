@@ -111,10 +111,8 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     #     callback_data=f"pay_yookassa:{tariff.id}"
     # )
     builder.button(
-        text=f"⭐️ Оплатить звездами {getattr(tariff, 'star_price', tariff.price)}",
-        callback_data=f"pay_stars:{tariff.id}"
-    )
-    builder.button(text="💎 Оплатить криптой", callback_data=f"pay_crypto:{tariff_id}")
+        text=f"⭐️ Оплатить звездами", callback_data=f"pay_stars:{tariff.id}")
+    builder.button(text="💎 Оплатить криптой", callback_data=f"pay_crypto:{tariff.id}")
     builder.button(text="⬅️ Назад", callback_data="subscribe")
     builder.adjust(1)
     await callback.message.edit_text(
@@ -300,7 +298,7 @@ async def pay_crypto_callback_handler(callback: types.CallbackQuery) -> None:
         invoice = await crypto_pay.create_invoice(
             asset="USDT",
             amount=usdt_amount,
-            description=f"Подписка: {tariff.name}",
+            description=f"Saver: {tariff.name}",
             payload=f"{user_id}:{tariff_id}"
         )
         pay_url = invoice.bot_invoice_url

@@ -8,6 +8,7 @@ from .download import router as download_router
 from .myhistory import router as myhistory_router
 from .referral import router as referral_router
 from .referral_info import router as referral_info_router
+from .crypto_payments import router as crypto_payments_router
 
 routers = [
     about_router,
@@ -18,5 +19,6 @@ routers = [
     download_router,
     myhistory_router,
     referral_router,
-    referral_info_router
+    referral_info_router,
+    crypto_payments_router,
 ]
