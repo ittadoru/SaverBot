@@ -32,7 +32,7 @@ async def main() -> None:
     setup_logger(bot)
     logger.info("Регистрация обработчиков...")
     register_handlers(dp)
-    crypto_pay.start_polling()
+    await crypto_pay.start_polling()
 
     logger.info("Установка команд бота...")
     await set_bot_commands(bot)
