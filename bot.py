@@ -9,6 +9,7 @@ from aiogram.types import BotCommand
 
 from loader import bot, dp, crypto_pay
 from handlers import register_handlers
+from handlers.user import crypto_payments
 from utils.logger import setup_logger
 
 logger = logging.getLogger(__name__)
