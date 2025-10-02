@@ -20,7 +20,7 @@ def create_bot() -> Bot:
     return Bot(
         token=BOT_TOKEN,
         session=session,
-        default=Bot.DefaultBotProperties(parse_mode=ParseMode.HTML),
+        parse_mode=ParseMode.HTML,
     )
 
 dp = Dispatcher(storage=MemoryStorage())
