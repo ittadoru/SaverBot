@@ -13,6 +13,7 @@ from handlers.user import crypto_payments
 from utils.logger import setup_logger
 
 logger = logging.getLogger(__name__)
+bot = create_bot()
 
 async def set_bot_commands(bot: Bot):
     """Устанавливает команды для меню бота."""
@@ -28,7 +29,7 @@ async def set_bot_commands(bot: Bot):
 
 async def main() -> None:
     """Настраивает логирование, регистрирует хендлеры и запускает polling."""
-    bot = create_bot()
+    
     setup_logger(bot)
     logger.info("Регистрация обработчиков...")
     register_handlers(dp)

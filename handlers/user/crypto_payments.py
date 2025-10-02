@@ -1,20 +1,21 @@
 import logging
 
-from aiogram.types import Message
-from aiosend.types import Invoice
+from aiogram.types import Message, Invoice
+from aiogram import Bot
+
 
 from db.base import get_session
 from db.subscribers import add_subscriber_with_duration
 from db.tariff import get_tariff_by_id
 from db.users import get_user_by_id, mark_user_has_paid
 from config import SUBSCRIBE_TOPIC_ID, SUPPORT_GROUP_ID
-from loader import crypto_pay, bot
+from loader import crypto_pay
 
 logger = logging.getLogger(__name__)
 
 
 @crypto_pay.invoice_paid()
-async def crypto_payment_handler(invoice: Invoice, message: Message):
+async def crypto_payment_handler(invoice: Invoice, message: Message, bot: Bot):
     """
     Handles successful crypto payments.
     """
