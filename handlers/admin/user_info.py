@@ -1,7 +1,8 @@
 """Админ: поиск пользователя по ID/username и показ карточки."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import html
 from typing import Optional
 
 from aiogram import Bot, F, Router, types
@@ -27,7 +28,6 @@ router.callback_query.filter(F.from_user.id.in_(ADMINS))
 
 class UserCallback(CallbackData, prefix="user_admin"):
     """Фабрика колбэков для действий с пользователем в админ-панели."""
-
     action: str
     user_id: int
 
@@ -97,8 +97,44 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
         else:
             subscription_status = "❌ Не активна"
 
-        last_links = await db_downloads.get_last_links(session, user.id, limit=3)
-        links_block = "\n".join(last_links) if last_links else "(нет недавних ссылок)"
+        # Получаем последние 3 ссылки с временем создания
+        last_links = await db_downloads.get_last_links(session, user.id, limit=3, include_time=True)
+        if last_links:
+            # Формат: ссылка\nDD.MM.YYYY HH:MM MSK — <relative>\n\n
+            msk = timezone(timedelta(hours=3))
+            now_msk = datetime.now(timezone.utc).astimezone(msk)
+
+            def _human_delta(seconds: int) -> str:
+                if seconds < 60:
+                    return "только что"
+                minutes = seconds // 60
+                if minutes < 60:
+                    return f"{minutes} мин. назад"
+                hours = minutes // 60
+                if hours < 24:
+                    return f"{hours} ч. назад"
+                days = hours // 24
+                if days < 30:
+                    return f"{days} дн. назад"
+                months = days // 30
+                if months < 12:
+                    return f"{months} мес. назад"
+                years = months // 12
+                return f"{years} г. назад"
+
+            parts: list[str] = []
+            for url, created_at in last_links:
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                created_msk = created_at.astimezone(msk)
+                time_str = created_msk.strftime('%d.%m.%Y %H:%M') + ' MSK'
+                rel = _human_delta(int((now_msk - created_msk).total_seconds()))
+                url_esc = html.escape(url, quote=True)
+                parts.append(f"<a href=\"{url_esc}\">{url_esc}</a>\n<code>{time_str} — {rel}</code>\n")
+
+            links_block = "\n".join(parts)
+        else:
+            links_block = "(нет недавних ссылок)"
 
         user_info_text = (
             f"<b>👤 Карточка пользователя</b>\n\n"

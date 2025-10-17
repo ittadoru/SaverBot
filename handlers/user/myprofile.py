@@ -9,7 +9,7 @@ from db.subscribers import get_subscriber_expiry
 from db.downloads import get_total_downloads, get_daily_downloads
 from db.platforms import get_platform_counts, PLATFORMS
 from handlers.user.referral import get_referral_stats
-from config import DAILY_DOWNLOAD_LIMITS
+from config import DAILY_DOWNLOAD_LIMITS, SUBSCRIBER_DAILY_LIMIT
 
 
 router = Router()
@@ -101,16 +101,17 @@ async def show_profile(callback: CallbackQuery) -> None:
             to_next = "Максимальный уровень!"
             progress_bar = ""
 
-    # Если есть активная подписка — всегда безлимит
+    # Если есть активная подписка — применяем лимит подписки из конфига (или безлимит, если None)
     now = datetime.now(expire_at.tzinfo) if expire_at else None
     if expire_at and expire_at > now:
-        left = '∞'
+        limit = SUBSCRIBER_DAILY_LIMIT
     else:
         limit = DAILY_DOWNLOAD_LIMITS.get(level)
-        if limit is None:
-            left = '∞'
-        else:
-            left = max(0, limit - today)
+
+    if limit is None:
+        left = '∞'
+    else:
+        left = max(0, limit - today)
     status = _format_subscription_status(expire_at)
     text = _build_profile_text(name, username, status, total, today, left, platform_stats)
     text += _build_referral_text(ref_count, level, to_next, progress_bar)

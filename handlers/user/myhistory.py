@@ -40,7 +40,7 @@ async def show_download_history(callback: CallbackQuery):
     """
     user_id = callback.from_user.id
     async with get_session() as session:
-        links = await get_last_links(session, user_id, limit=10, include_time=True)
+        links = await get_last_links(session, user_id, limit=5, include_time=True)
 
     if not links:
         text = "У вас пока нет истории скачиваний."
