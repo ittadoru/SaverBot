@@ -14,17 +14,13 @@ from db.promocodes import add_promocode, get_promocode
 from db.users import add_or_update_user, is_user_exists, log_user_activity
 from db.subscribers import add_subscriber_with_duration
 from handlers.user.referral import get_referral_stats
-from config import SUBSCRIPTION_LIFETIME_DAYS, SUPPORT_GROUP_ID, NEW_USER_TOPIC_ID
+from config import SUBSCRIPTION_LIFETIME_DAYS, SUPPORT_GROUP_ID, NEW_USER_TOPIC_ID, REF_GIFT_DAYS
 from handlers.user.menu import MAIN_MENU_TEXT, get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
 PROMO_DURATION_DAYS = 10
-PROMO_PREFIX = "WELCOME"
-PROMO_RANDOM_MIN = 100_000
-PROMO_RANDOM_MAX = 999_999
-PROMO_MAX_TRIES = 5
-REF_GIFT_DAYS = 10
+PROMO_MAX_TRIES = 3
 
 router = Router()
 
@@ -32,7 +28,7 @@ router = Router()
 
 async def _generate_unique_promocode(session, tries: int = PROMO_MAX_TRIES) -> str | None:
     for attempt in range(tries):
-        code = f"{PROMO_PREFIX}-{random.randint(PROMO_RANDOM_MIN, PROMO_RANDOM_MAX)}"
+        code = f"WELCOME-{random.randint(100_000, 999_999)}"
         if await get_promocode(session, code):
             continue
         await add_promocode(session, code, duration_days=PROMO_DURATION_DAYS)
@@ -103,8 +99,9 @@ async def send_welcome_message(user_id: int, promo_code: Optional[str], bot: Bot
 async def notify_support_group(bot: Bot, user_id: int, username_raw: str, referrer_id: Optional[int]):
     await bot.send_message(
         SUPPORT_GROUP_ID,
-        text=f"👤 Новый пользователь\n\nID: {user_id}\nИмя: {username_raw}\nРеферал: {referrer_id}",
+        text=f"👤 Новый пользователь\n\nID: <code>{user_id}</code>\nИмя: {username_raw}\nРеферал: <code>{referrer_id}</code>",
         message_thread_id=NEW_USER_TOPIC_ID,
+        parse_mode="HTML"
     )
 
 

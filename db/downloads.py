@@ -133,8 +133,24 @@ async def add_download_link(session: AsyncSession, user_id: int, url: str) -> No
 
 
 
-async def get_last_links(session: AsyncSession, user_id: int, limit: int = 3) -> list[str]:
-    """Возвращает последние ссылки пользователя (до limit штук)."""
+async def get_last_links(
+    session: AsyncSession, user_id: int, limit: int = 3, include_time: bool = False
+) -> list[str] | list[tuple[str, datetime.datetime]]:
+    """Возвращает последние ссылки пользователя (до `limit` штук).
+
+    Если include_time=False (по умолчанию) возвращает list[str] с URL.
+    Если include_time=True возвращает list[tuple[url, created_at]].
+    """
+    if include_time:
+        q = (
+            select(DownloadLink.url, DownloadLink.created_at)
+            .where(DownloadLink.user_id == user_id)
+            .order_by(DownloadLink.created_at.desc())
+            .limit(limit)
+        )
+        rows = await session.execute(q)
+        return [(r[0], r[1]) for r in rows.all()]
+
     q = (
         select(DownloadLink.url)
         .where(DownloadLink.user_id == user_id)
