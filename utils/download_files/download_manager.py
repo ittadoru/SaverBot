@@ -83,6 +83,9 @@ async def process_youtube_or_other(
 
             if mode == "audio":
                 file_path = await downloader.download_audio(url)
+                if not file_path:
+                    logger.warning("[DOWNLOAD] downloader returned empty result for audio: %s", url)
+                    return await message.answer("❗️ Не удалось скачать аудио: контент недоступен или требуется вход.")
                 await send_audio(message.bot, message, message.chat.id, file_path)
 
             elif mode and str(mode).isdigit():
@@ -92,6 +95,12 @@ async def process_youtube_or_other(
                         f"⚠️ Видео слишком большое: {result[1]} МБ. "
                         f"Ваш лимит — {max_filesize_mb} МБ."
                     )
+                if result is None:
+                    logger.warning("[DOWNLOAD] downloader returned None for itag download: %s", url)
+                    return await message.answer("❗️ Не удалось скачать: контент недоступен или требуется вход.")
+                if isinstance(result, tuple):
+                    logger.warning("[DOWNLOAD] downloader returned error tuple for itag: %s -> %s", url, result)
+                    return await message.answer(f"❗️ Ошибка при скачивании: {result}")
                 file_path = result
                 w, h = get_video_resolution(file_path)
                 await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
@@ -103,13 +112,26 @@ async def process_youtube_or_other(
                         f"⚠️ Видео слишком большое: {result[1]} МБ. "
                         f"Ваш лимит — {max_filesize_mb} МБ."
                     )
+                if result is None:
+                    logger.warning("[DOWNLOAD] downloader returned None for download: %s", url)
+                    return await message.answer("❗️ Не удалось скачать: контент недоступен или требуется вход.")
+                if isinstance(result, tuple):
+                    logger.warning("[DOWNLOAD] downloader returned error tuple: %s -> %s", url, result)
+                    return await message.answer(f"❗️ Ошибка при скачивании: {result}")
                 file_path = result
                 w, h = get_video_resolution(file_path)
                 await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
 
         else:
             downloader = get_downloader(url)
-            file_path = await downloader.download(url, user_id)
+            result = await downloader.download(url, user_id)
+            if result is None:
+                logger.warning("[DOWNLOAD] downloader returned None for non-youtube: %s", url)
+                return await message.answer("❗️ Не удалось скачать: контент недоступен или требуется вход.")
+            if isinstance(result, tuple):
+                logger.warning("[DOWNLOAD] downloader returned error tuple for non-youtube: %s -> %s", url, result)
+                return await message.answer(f"❗️ Ошибка при скачивании: {result}")
+            file_path = result
             w, h = get_video_resolution(file_path)
             await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
 
