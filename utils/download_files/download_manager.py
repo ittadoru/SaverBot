@@ -124,9 +124,18 @@ async def process_youtube_or_other(
 
         else:
             downloader = get_downloader(url)
-            result = await downloader.download(url, user_id)
+            if downloader is None:
+                logger.warning("[DOWNLOAD] unsupported platform for url: %s", url)
+                return await message.answer("❗️ Эта платформа пока не поддерживается.")
+
+            result = await downloader.download(url, message=message, user_id=user_id)
             if result is None:
                 logger.warning("[DOWNLOAD] downloader returned None for non-youtube: %s", url)
+                if platform == "instagram":
+                    return await message.answer(
+                        "❗️ Instagram не отдал медиа без авторизации. "
+                        "Пост может быть приватным или требует cookies."
+                    )
                 return await message.answer("❗️ Не удалось скачать: контент недоступен или требуется вход.")
             if isinstance(result, tuple):
                 logger.warning("[DOWNLOAD] downloader returned error tuple for non-youtube: %s -> %s", url, result)

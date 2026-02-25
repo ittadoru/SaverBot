@@ -12,7 +12,7 @@ logger = get_logger(__name__, platform="tiktok")
 
 
 class TikTokDownloader(BaseDownloader):
-    async def download(self, url: str, message: types.Message, user_id: int | None = None) -> str:
+    async def download(self, url: str, message: types.Message | None = None, user_id: int | None = None) -> str | None:
         """Скачивание видео с TikTok."""
         filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4()}.mp4")
         logger.info("⬇️ [DOWNLOAD] start url=%s", url)
@@ -38,20 +38,19 @@ class TikTokDownloader(BaseDownloader):
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([url])
-                    return
+                    return True
                 except yt_dlp.utils.DownloadError as e:  # noqa: PERF203
                     logger.error("yt-dlp error attempt=%s/%s err=%s", attempt, max_attempts, e)
                 except Exception:  # noqa: BLE001
                     logger.exception("unexpected error attempt=%s/%s", attempt, max_attempts)
                 if attempt < max_attempts:
                     time.sleep(5)
-                else:
-                    raise Exception("all attempts failed")
+            return False
 
-        try:
-            await loop.run_in_executor(None, run_download_with_retries)
-        except Exception as e:
-            logger.error("download failed err=%s", str(e))
+        success = await loop.run_in_executor(None, run_download_with_retries)
+        if not success:
+            logger.error("download failed after retries url=%s", url)
+            return None
 
         logger.info("✅ [DOWNLOAD] done file=%s", filename)
         return filename

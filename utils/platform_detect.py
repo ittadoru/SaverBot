@@ -10,10 +10,10 @@ def detect_platform(url: str) -> str:
         if "youtube.com" in url or "youtu.be" in url:
             return "youtube"
 
-        if "vt.tiktok.com" in url or "www.tiktok.com" in url:
+        if "vt.tiktok.com" in url or "www.tiktok.com" in url or "tiktok.com" in url:
             return "tiktok"
 
-        if "www.instagram.com" in url:
+        if "www.instagram.com" in url or "instagram.com" in url:
             return "instagram"
 
         logger.warning("⚠️ [DETECT] Платформа не определена для URL: %s", url)
