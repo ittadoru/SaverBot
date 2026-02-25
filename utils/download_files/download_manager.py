@@ -138,6 +138,15 @@ async def process_youtube_or_other(
                     )
                 return await message.answer("❗️ Не удалось скачать: контент недоступен или требуется вход.")
             if isinstance(result, tuple):
+                if platform == "tiktok" and result[0] == "IP_BLOCKED":
+                    return await message.answer(
+                        "❗️ TikTok блокирует IP сервера для этого видео. "
+                        "Нужен прокси/VPN (резидентский) для контейнера app."
+                    )
+                if platform == "tiktok" and result[0] == "LOGIN_REQUIRED":
+                    return await message.answer(
+                        "❗️ TikTok требует cookies/авторизацию для этого видео."
+                    )
                 logger.warning("[DOWNLOAD] downloader returned error tuple for non-youtube: %s -> %s", url, result)
                 return await message.answer(f"❗️ Ошибка при скачивании: {result}")
             file_path = result

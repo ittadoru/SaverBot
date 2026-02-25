@@ -10,7 +10,8 @@ pydantic==2.11.7
 yookassa==3.0.1
 colorlog==6.9.0
 watchfiles==1.1.0
-yt-dlp==2025.12.8
+yt-dlp==2026.2.21
+curl-cffi==0.13.0
 moviepy==2.2.1
 numpy==1.26.4
 aiofiles==24.1.0
