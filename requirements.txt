@@ -12,6 +12,7 @@ colorlog==6.9.0
 watchfiles==1.1.0
 yt-dlp==2025.12.8
 moviepy==2.2.1
+numpy==1.26.4
 aiofiles==24.1.0
 pytubefix==10.3.6
 Telethon==1.41.2
