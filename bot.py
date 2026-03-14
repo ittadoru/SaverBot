@@ -18,11 +18,10 @@ bot = create_bot()
 async def set_bot_commands(bot: Bot):
     """Устанавливает команды для меню бота."""
     commands = [
-        BotCommand(command="subscribe", description="⭐️ Оформить подписку"),
+        BotCommand(command="subscribe", description="⭐️ Купить tokenX"),
         BotCommand(command="start", description="👤 Профиль"),
         BotCommand(command="invite", description="👥 Пригласить друга"),
         BotCommand(command='help', description='❓ Обратиться в поддержку'),
-        BotCommand(command="promocode", description="🎁 Активировать промокод"),
     ]
     await bot.set_my_commands(commands)
 

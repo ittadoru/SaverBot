@@ -7,7 +7,6 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.exc import SQLAlchemyError
 
 from db.base import Base
-from db.subscribers import Subscriber
 
 
 class User(Base):
@@ -206,22 +205,6 @@ async def is_user_exists(session: AsyncSession, user_id: int) -> bool:
     return user is not None
 
 
-async def get_user_ids_without_subscription(session: AsyncSession) -> list[int]:
-    """
-    Возвращает список ID пользователей, у которых нет активной подписки (нет подписки или истекла).
-    """
-    now = datetime.now(datetime.timezone.utc)
-    query = (
-        select(User.id)
-        .outerjoin(Subscriber, User.id == Subscriber.user_id)
-        .where(
-            (Subscriber.user_id.is_(None)) |
-            (Subscriber.expire_at <= now)
-        )
-    )
-    result = await session.execute(query)
-    return list(result.scalars().all())
-
 async def log_user_activity(session: AsyncSession, user_id: int) -> None:
     """
     Логирует активность пользователя (создаёт запись UserActivity).
@@ -237,7 +220,7 @@ async def log_user_activity(session: AsyncSession, user_id: int) -> None:
 
 async def get_top_referrers(session: AsyncSession, limit: int = 10):
     """
-    Возвращает топ пользователей по количеству рефералов (id, username, ref_count, уровень).
+    Возвращает топ пользователей по количеству приглашений (id, username, ref_count).
     """
     # Подсчёт количества рефералов для каждого пользователя
     subq = (
@@ -259,25 +242,13 @@ async def get_top_referrers(session: AsyncSession, limit: int = 10):
     )
     result = await session.execute(query)
     rows = result.all()
-    # Для каждого — вычисляем уровень (по вашей логике)
+    # Формируем плоский DTO-объект
     top = []
     for row in rows:
-        ref_count = row.ref_count or 0
-        # Логика уровней (совпадает с get_referral_stats)
-        if ref_count >= 30:
-            level = 5
-        elif ref_count >= 10:
-            level = 4
-        elif ref_count >= 3:
-            level = 3
-        elif ref_count >= 1:
-            level = 2
-        else:
-            level = 1
+        ref_count = int(row.ref_count or 0)
         top.append(type('TopRef', (), {
             'id': row.id,
             'username': row.username,
             'ref_count': ref_count,
-            'level': level
         }))
     return top

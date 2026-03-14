@@ -1,83 +1,147 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+from config import YOUTUBE_MAX_DURATION_SECONDS
+from db.base import get_session
+from db.tokens import get_token_snapshot
 from services.youtube import YTDLPDownloader
+from utils.token_policy import (
+    YOUTUBE_QUALITY_ORDER,
+    format_duration,
+    get_youtube_price,
+)
+
+
+QUALITY_TO_RESOLUTION = {
+    "480p": 480,
+    "720p": 720,
+    "1080p": 1080,
+    "1440p": 1440,
+    "4k": 2160,
+}
+
+
+def _pick_itag_for_resolution(formats: list[dict], resolution: int) -> int | None:
+    candidates: list[dict] = []
+    for fmt in formats:
+        res = fmt.get("res")
+        if not res or not str(res).endswith("p"):
+            continue
+        try:
+            res_int = int(str(res).replace("p", ""))
+        except ValueError:
+            continue
+        if res_int == resolution:
+            candidates.append(fmt)
+
+    if not candidates:
+        return None
+
+    # Prefer progressive streams, then larger filesize.
+    candidates.sort(
+        key=lambda x: (
+            bool(x.get("progressive")),
+            int(x.get("filesize") or 0),
+        ),
+        reverse=True,
+    )
+    return int(candidates[0]["itag"])
+
+
+def _currency_label(currency: str) -> str:
+    return "T" if currency == "token" else "TX"
 
 
 async def prepare_youtube_menu(url: str, user_id: int):
     """
-    Возвращает (keyboard, caption, preview) для выбора качества YouTube-видео.
+    Return (keyboard, caption, preview, state_payload) for YouTube options.
     """
     downloader = YTDLPDownloader()
     info = await downloader.get_available_video_options(url)
     preview = info["thumbnail_url"]
+    duration_seconds = int(info.get("duration_seconds") or 0)
 
-    # Получаем статус пользователя
-    from db.base import get_session
-    from db.subscribers import is_subscriber as db_is_subscriber
-    from handlers.user.referral import get_referral_stats
     async with get_session() as session:
-        sub = await db_is_subscriber(session, user_id)
-        _, level, _ = await get_referral_stats(session, user_id)
+        snapshot = await get_token_snapshot(session, user_id, refresh_daily=True)
+        await session.commit()
 
-    # Фильтрация форматов по статусу
-    from config import DOWNLOAD_FILE_LIMIT
-    def is_format_allowed(fmt):
-        res_int = int(fmt["res"].replace("p", ""))
-        size_mb = fmt["size_mb"]
-        if sub:
-            return 240 <= res_int <= 1080 and size_mb <= DOWNLOAD_FILE_LIMIT * 10
-        if level == 2:
-            return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT * 2
-        if level == 3:
-            return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT * 4
-        if level == 4:
-            return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT * 10
-        return res_int < 720 and size_mb <= DOWNLOAD_FILE_LIMIT
+    lines = [
+        f"<b>🎬 {info['title']}</b>",
+        f"⏱ Длительность: <b>{format_duration(duration_seconds)}</b>",
+    ]
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    options_payload: dict[str, dict] = {}
 
+    if duration_seconds >= YOUTUBE_MAX_DURATION_SECONDS:
+        lines.append("❌ Видео длиннее 3 часов недоступны для скачивания.")
+        rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="start")])
+        return (
+            InlineKeyboardMarkup(inline_keyboard=rows),
+            "\n".join(lines),
+            preview,
+            {"duration_seconds": duration_seconds, "options": options_payload},
+        )
 
-    # Собираем все уникальные разрешения
-    unique_res = {}
-    for fmt in info["formats"]:
-        if fmt.get("mime_type") == "video/mp4":
-            res_str = fmt.get("res")
-            if res_str and res_str.endswith("p"):
-                try:
-                    res_int = int(res_str.replace("p", ""))
-                    if 240 <= res_int <= 1080:
-                        if (
-                            res_str not in unique_res
-                            or (fmt.get("progressive") and not unique_res[res_str].get("progressive"))
-                        ):
-                            unique_res[res_str] = fmt
-                except (ValueError, TypeError):
-                    continue
+    for quality in YOUTUBE_QUALITY_ORDER:
+        target_res = QUALITY_TO_RESOLUTION[quality]
+        itag = _pick_itag_for_resolution(info["formats"], target_res)
+        price = get_youtube_price(quality, duration_seconds)
 
-    sorted_res = sorted(unique_res.items(), key=lambda x: int(x[0].replace("p", "")))
+        if itag is None or price is None:
+            text = f"🔒 {quality}"
+            cb = "disabled"
+        else:
+            currency, amount = price
+            available_balance = snapshot.total_tokens if currency == "token" else snapshot.token_x
+            affordable = available_balance >= amount
+            cb = f"ytopt:{quality}" if affordable else "disabled"
+            icon = "⚡️" if affordable else "🔒"
+            text = f"{icon} {quality} · {amount}{_currency_label(currency)}"
+            options_payload[quality] = {
+                "itag": itag,
+                "currency": currency,
+                "cost": amount,
+            }
+            lines.append(f"{icon} {quality}: {amount} {_currency_label(currency)}")
 
-    # текст
-    lines = [f"<b>🎬 {info['title']}</b>\n", "Приблизительные размеры:"]
-    rows = []
-    row = []
-
-    for res, fmt in sorted_res:
-        size_mb = fmt.get("size_mb") or (fmt.get("filesize", 0) / 1024 / 1024)
-        size_str = f"{size_mb:.0f}MB" if size_mb else "?MB"
-        allowed = is_format_allowed(fmt)
-        emoji = "⚡️" if allowed else "🔒"
-        cb = f"ytres:{fmt['itag']}" if allowed else "disabled"
-        row.append(InlineKeyboardButton(text=f"{emoji} {res}", callback_data=cb))
+        row.append(InlineKeyboardButton(text=text, callback_data=cb))
         if len(row) == 2:
             rows.append(row)
             row = []
-        lines.append(f"{emoji}  {res}: {size_str}")
 
     if row:
         rows.append(row)
 
-    # аудио
-    rows.append([InlineKeyboardButton(text="🎧 Аудио", callback_data=f"ytdl:audio:{url}")])
+    audio_price = get_youtube_price("audio", duration_seconds)
+    if audio_price:
+        currency, amount = audio_price
+        balance = snapshot.total_tokens if currency == "token" else snapshot.token_x
+        affordable = balance >= amount
+        icon = "⚡️" if affordable else "🔒"
+        callback_data = "ytopt:audio" if affordable else "disabled"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{icon} 🎧 Аудио · {amount}{_currency_label(currency)}",
+                    callback_data=callback_data,
+                )
+            ]
+        )
+        options_payload["audio"] = {
+            "itag": None,
+            "currency": currency,
+            "cost": amount,
+        }
+        lines.append(f"{icon} Аудио: {amount} {_currency_label(currency)}")
 
+    lines.append(
+        "\n<b>Баланс:</b> "
+        f"токены <b>{snapshot.total_tokens}</b> "
+        f"(ежедневные {snapshot.daily_tokens}, бонусные {snapshot.bonus_tokens}), "
+        f"tokenX <b>{snapshot.token_x}</b>"
+    )
+    lines.append("<i>Выбери качество. Недоступные кнопки отмечены 🔒.</i>")
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
-    lines.append("\n<i>Выберите разрешение или получите только аудио:</i>")
-    return keyboard, "\n".join(lines), preview
+    payload = {"duration_seconds": duration_seconds, "options": options_payload}
+    return keyboard, "\n".join(lines), preview, payload

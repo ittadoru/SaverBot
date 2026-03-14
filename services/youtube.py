@@ -10,14 +10,10 @@ from __future__ import annotations
 import os
 import uuid
 import asyncio
-from handlers.user.referral import get_referral_stats
 from pytubefix import YouTube
 import re 
 
-from utils.get_file_max_mb import get_max_filesize_mb
 from utils.logger import get_logger
-from db.subscribers import is_subscriber as db_is_subscriber
-from db.base import get_session
 from .base import BaseDownloader
 from config import DOWNLOAD_DIR
 
@@ -25,7 +21,13 @@ from config import DOWNLOAD_DIR
 logger = get_logger(__name__, platform="youtube")
 
 class YTDLPDownloader(BaseDownloader):
-    async def download_by_itag(self, url: str, itag: int, message, user_id: int | None = None) -> str | tuple[str, str]:
+    async def download_by_itag(
+        self,
+        url: str,
+        itag: int,
+        message,
+        user_id: int | None = None,
+    ) -> str | tuple[str, str] | None:
         logger.info("⬇️ [DOWNLOAD] Начало скачивания по itag=%s, url=%s", itag, url)
         """
         Скачивание видео по конкретному itag (mux если нужно).
@@ -44,7 +46,9 @@ class YTDLPDownloader(BaseDownloader):
                 await loop.run_in_executor(None, run_download)
             except Exception as e:
                 logger.error("❌ [DOWNLOAD] Ошибка при скачивании видео по тегу: %s", str(e))
-
+                return None
+            if not os.path.exists(filename):
+                return None
             logger.info("✅ [DOWNLOAD] Скачивание успешно: файл=%s", filename)
             return filename
         # Если не progressive — mux video+audio
@@ -75,7 +79,7 @@ class YTDLPDownloader(BaseDownloader):
 
             logger.info(f"🎛️ [MUX] ffmpeg объединение начинается")
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            stdout, stderr = await proc.communicate()
+            _stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 logger.error(f"❌ [MUX] Ошибка ffmpeg mux: {stderr.decode()}")
                 raise Exception(f"ffmpeg mux error: {stderr.decode()}")
@@ -85,12 +89,14 @@ class YTDLPDownloader(BaseDownloader):
                 await asyncio.to_thread(os.remove, audio_path)
             except Exception:
                 pass
+            if not os.path.exists(filename):
+                return None
             logger.info("✅ [DOWNLOAD] Скачивание успешно: файл=%s", filename)
             return filename
 
     async def get_available_video_options(self, url: str) -> dict:
         """
-        Возвращает title, thumbnail_url и список форматов mp4 (240-1080p, не webm, не выше лимита по размеру).
+        Возвращает title, thumbnail_url, duration_seconds и список форматов mp4.
         Каждый формат: {'itag', 'res', 'progressive', 'filesize', 'mime_type'}
         """
         loop = asyncio.get_running_loop()
@@ -98,15 +104,16 @@ class YTDLPDownloader(BaseDownloader):
             yt = YouTube(url)
             title = yt.title
             thumbnail_url = yt.thumbnail_url
+            duration_seconds = int(getattr(yt, "length", 0) or 0)
             formats = []
             for s in yt.streams:
-                # Только mp4, только видео, только 240-1080p, не webm
+                # Только mp4, только видео, 240-2160p
                 if s.mime_type and s.mime_type.startswith('video/mp4') and s.resolution:
                     try:
                         res = int(s.resolution.replace('p',''))
                     except Exception:
                         continue
-                    if 240 <= res <= 1080:
+                    if 240 <= res <= 2160:
                         size_mb = s.filesize / 1024 / 1024 if s.filesize else 0
                         formats.append({
                             'itag': s.itag,
@@ -121,6 +128,7 @@ class YTDLPDownloader(BaseDownloader):
             return {
                 'title': title,
                 'thumbnail_url': thumbnail_url,
+                'duration_seconds': duration_seconds,
                 'formats': formats
             }
         return await loop.run_in_executor(None, fetch)
@@ -147,21 +155,6 @@ class YTDLPDownloader(BaseDownloader):
             stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
 
         if stream:
-            filesize_bytes = stream.filesize
-            filesize_mb = filesize_bytes / (1024 * 1024) if filesize_bytes else 0
-            
-            is_sub = False
-            max_filesize_mb = 50  # Default value
-
-            if user_id is not None and isinstance(user_id, int):
-                async with get_session() as session:
-                    is_sub = await db_is_subscriber(session, user_id)
-                    _, level, _ = await get_referral_stats(session, user_id)
-                    max_filesize_mb = await get_max_filesize_mb(level, is_sub)
-
-            if not is_sub and filesize_mb > max_filesize_mb:
-                return ("DENIED_SIZE", f"{filesize_mb:.1f}")
-
             def run_download():
                 stream.download(output_path=DOWNLOAD_DIR, filename=os.path.basename(filename))
 
@@ -170,7 +163,9 @@ class YTDLPDownloader(BaseDownloader):
             except Exception as e:
                 err = str(e)
                 logger.error("❌ [DOWNLOAD] Ошибка при скачивании: %s", err)
-
+                return None
+            if not os.path.exists(filename):
+                return None
             logger.info("✅ [DOWNLOAD] Готово: файл=%s", filename)
             return filename
         else:
@@ -204,7 +199,7 @@ class YTDLPDownloader(BaseDownloader):
                 filename
             ]
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            stdout, stderr = await proc.communicate()
+            _stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 logger.error(f"❌ [MUX] Ошибка ffmpeg mux: {stderr.decode()}")
                 raise Exception(f"ffmpeg mux error: {stderr.decode()}")
@@ -214,10 +209,12 @@ class YTDLPDownloader(BaseDownloader):
                 os.remove(audio_path)
             except Exception:
                 pass
+            if not os.path.exists(filename):
+                return None
             logger.info("✅ [MUX] MUX завершён: файл=%s", filename)
             return filename
 
-    async def download_audio(self, url: str) -> str:
+    async def download_audio(self, url: str) -> str | None:
         logger.info("⬇️ [AUDIO] Начало скачивания аудио, url=%s", url)
         """
         Скачивает лучший аудиопоток (m4a/mp4) через pytubefix, без конвертации в mp3.
@@ -238,7 +235,9 @@ class YTDLPDownloader(BaseDownloader):
             await loop.run_in_executor(None, run_download)
         except Exception as e:
             logger.error("❌ [AUDIO] Ошибка при скачивании аудио: %s", str(e))
-
+            return None
+        if not os.path.exists(filename):
+            return None
         logger.info("✅ [AUDIO] Готово: файл=%s", filename)
         return filename
     

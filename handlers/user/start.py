@@ -1,7 +1,6 @@
-"""Старт: регистрация/обновление пользователя и выдача приветственного промокода новым."""
+"""Start flow: registration, referral rewards and profile summary in start menu."""
 
 import logging
-import random
 from typing import Optional, Union
 
 from aiogram import F, Router, types, Bot
@@ -10,31 +9,21 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message, CallbackQuery
 
 from db.base import get_session
-from db.promocodes import add_promocode, get_promocode
 from db.users import add_or_update_user, is_user_exists, log_user_activity
-from db.subscribers import add_subscriber_with_duration
-from handlers.user.referral import get_referral_stats
-from config import SUBSCRIPTION_LIFETIME_DAYS, SUPPORT_GROUP_ID, NEW_USER_TOPIC_ID, REF_GIFT_DAYS
+from db.tokens import add_bonus_tokens, add_token_x, grant_welcome_token_x
+from config import (
+    SUPPORT_GROUP_ID,
+    NEW_USER_TOPIC_ID,
+    WELCOME_BONUS_TOKEN_X,
+    REFERRAL_BONUS_TOKENS,
+    REFERRAL_BONUS_TOKEN_X,
+)
 from handlers.user.menu import MAIN_MENU_TEXT, get_main_menu_keyboard
+from handlers.user.tokens import build_profile_block
 
 logger = logging.getLogger(__name__)
 
-PROMO_DURATION_DAYS = 10
-PROMO_MAX_TRIES = 3
-
 router = Router()
-
-# ----------------- вспомогательные функции -----------------
-
-async def _generate_unique_promocode(session, tries: int = PROMO_MAX_TRIES) -> str | None:
-    for attempt in range(tries):
-        code = f"WELCOME-{random.randint(100_000, 999_999)}"
-        if await get_promocode(session, code):
-            continue
-        await add_promocode(session, code, duration_days=PROMO_DURATION_DAYS)
-        return code
-    logger.warning("⚠️ [START] Не удалось сгенерировать уникальный промокод после %d попыток", tries)
-    return None
 
 
 def parse_ref_args(message: types.Message, user_id: int) -> Optional[int]:
@@ -56,44 +45,47 @@ def parse_ref_args(message: types.Message, user_id: int) -> Optional[int]:
 
 async def register_user(session, user_id: int, first_name: str, username: str, referrer_id: Optional[int]):
     is_new = not await is_user_exists(session, user_id)
-    await add_or_update_user(session, user_id, first_name=first_name, username=username, referrer_id=referrer_id if is_new else None)
+    valid_referrer_id: Optional[int] = None
+    if is_new and referrer_id and await is_user_exists(session, referrer_id):
+        valid_referrer_id = referrer_id
+
+    await add_or_update_user(
+        session,
+        user_id,
+        first_name=first_name,
+        username=username,
+        referrer_id=valid_referrer_id if is_new else None,
+    )
     await log_user_activity(session, user_id)
-    promo_code = None
     if is_new:
-        promo_code = await _generate_unique_promocode(session)
-    return is_new, promo_code
+        await grant_welcome_token_x(session, user_id, WELCOME_BONUS_TOKEN_X)
+    return is_new, valid_referrer_id
 
 
-async def process_referral_bonus(session, user_id: int, referrer_id: int, bot: Bot):
+async def process_referral_bonus(session, referrer_id: int, bot: Bot):
     try:
-        await bot.send_message(user_id, "Ты получил бонус за реферала! (3 дня подписки)")
-        await add_subscriber_with_duration(session, user_id, REF_GIFT_DAYS)
-
-        await bot.send_message(referrer_id, "Ты получил бонус за реферала! (3 дня подписки)")
-        await add_subscriber_with_duration(session, referrer_id, REF_GIFT_DAYS)
-        logger.info(f"🎁 [START] Начислен бонус рефереру {referrer_id} за нового пользователя {user_id}")
-
-        ref_count, level, _ = await get_referral_stats(session, referrer_id)
-        if ref_count == 30:
-            await add_subscriber_with_duration(session, referrer_id, SUBSCRIPTION_LIFETIME_DAYS)
-            await bot.send_message(referrer_id, "🎉 Поздравляем! Бессрочная подписка!")
-        elif ref_count == 10:
-            await bot.send_message(referrer_id, "🎉 Поздравляем! Вы стали VIP!")
-        elif ref_count == 3:
-            await bot.send_message(referrer_id, "🎉 3 уровень! Лимиты увеличены!")
-        elif ref_count == 1:
-            await bot.send_message(referrer_id, "🎉 2 уровень! Лимиты улучшены!")
+        await add_bonus_tokens(session, referrer_id, REFERRAL_BONUS_TOKENS)
+        await add_token_x(session, referrer_id, REFERRAL_BONUS_TOKEN_X)
+        await bot.send_message(
+            referrer_id,
+            (
+                "🎁 По твоей ссылке зарегистрировался новый пользователь!\n"
+                f"Начислено: +{REFERRAL_BONUS_TOKENS} токенов и +{REFERRAL_BONUS_TOKEN_X} tokenX."
+            ),
+        )
     except Exception as e:
         logger.error(f"❌ Ошибка при бонусе рефереру {referrer_id}: {e}")
 
 
-async def send_welcome_message(user_id: int, promo_code: Optional[str], bot: Bot):
-    if promo_code:
-        promo_text = (
-            f"Подарок новому пользователю: промокод на {PROMO_DURATION_DAYS} дней подписки:\n"
-            f"<pre>{promo_code}</pre>\nАктивируй его через меню профиля.\n\n"
-        )
-        await bot.send_message(user_id, promo_text, parse_mode="HTML")
+async def send_welcome_message(user_id: int, bot: Bot):
+    await bot.send_message(
+        user_id,
+        (
+            "🎉 Добро пожаловать!\n"
+            f"Стартовый бонус: +{WELCOME_BONUS_TOKEN_X} tokenX.\n"
+            "Обычные токены обновляются каждый день автоматически."
+        ),
+    )
 
 
 async def notify_support_group(bot: Bot, user_id: int, username_raw: str, referrer_id: Optional[int]):
@@ -126,17 +118,25 @@ async def start_flow(event: Union[Message, CallbackQuery]):
         return
 
     async with get_session() as session:
-        is_new, promo_code = await register_user(session, user_id, user.first_name, user.username, referrer_id)
+        is_new, valid_referrer_id = await register_user(
+            session,
+            user_id,
+            user.first_name,
+            user.username,
+            referrer_id,
+        )
 
-        if is_new and referrer_id:
-            await process_referral_bonus(session, user_id, referrer_id, msg.bot)
+        if is_new and valid_referrer_id:
+            await process_referral_bonus(session, valid_referrer_id, msg.bot)
+        await session.commit()
 
         if is_new:
-            await send_welcome_message(user_id, promo_code, msg.bot)
-            await notify_support_group(msg.bot, user_id, username_raw, referrer_id)
+            await send_welcome_message(user_id, msg.bot)
+            await notify_support_group(msg.bot, user_id, username_raw, valid_referrer_id)
 
     # показать главное меню
-    text = MAIN_MENU_TEXT.format(username=user.username)
+    profile_block = await build_profile_block(user_id)
+    text = MAIN_MENU_TEXT.format(username=user.username or "друг", profile_block=profile_block)
     kb = get_main_menu_keyboard()
     try:
         if isinstance(event, CallbackQuery):

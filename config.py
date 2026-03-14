@@ -23,27 +23,37 @@ DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "downloads")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
 RUB_PER_USDT = 90.0
 
+# ---------------- Token economy ----------------
+DAILY_FREE_TOKENS = 100
+WELCOME_BONUS_TOKEN_X = 50
+REFERRAL_BONUS_TOKENS = 50
+REFERRAL_BONUS_TOKEN_X = 1
+TOKEN_X_TO_TOKEN_RATE = 15
 
-DAILY_DOWNLOAD_LIMITS = {
-    1: 10,
-    2: 15,
-    3: 20,
-    4: 35,
-    5: 50,
+SOCIAL_DAILY_LIMIT = 20
+SOCIAL_RESET_TOKEN_COST = 100
+SOCIAL_RESET_TOKEN_X_COST = 2
+
+YOUTUBE_MAX_DURATION_SECONDS = 3 * 60 * 60
+YOUTUBE_DURATION_BUCKETS_SECONDS = (
+    5 * 60,   # < 5 min
+    30 * 60,  # < 30 min
+    3 * 60 * 60,  # < 3 hours
+)
+YOUTUBE_PRICING = {
+    "480p": {"currency": "token", "tiers": (5, 10, 20)},
+    "720p": {"currency": "token", "tiers": (7, 15, 27)},
+    "1080p": {"currency": "token", "tiers": (10, 20, 35)},
+    "1440p": {"currency": "token_x", "tiers": (1, 3, 7)},
+    "4k": {"currency": "token_x", "tiers": (2, 7, 15)},
+    "audio": {"currency": "token", "tiers": (2, 5, 10)},
 }
-SUBSCRIBER_DAILY_LIMIT = 50
+
+
 DOWNLOAD_FILE_LIMIT = 100
-
-FORMAT_SELECTION_TIMEOUT = 60
-
-SUBSCRIPTION_YEARS_FOR_LIFETIME = 100
-SUBSCRIPTION_LIFETIME_DAYS = SUBSCRIPTION_YEARS_FOR_LIFETIME * 365
 
 BROADCAST_PROGRESS_UPDATE_INTERVAL = 7
 BROADCAST_PER_MESSAGE_DELAY = 0.2
 
-REF_GIFT_DAYS = 10
-
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-

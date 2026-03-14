@@ -1,10 +1,9 @@
 
-"""Webhook сервер FastAPI для обработки уведомлений об оплате и запуска бота."""
+"""FastAPI webhook server for payments and media file serving."""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
 from typing import Any
 
@@ -17,10 +16,10 @@ import asyncio
 
 from db.base import get_session  # (13) убрали динамический импорт
 from db.subscribers import (
-    add_subscriber_with_duration,
     is_payment_processed,
     mark_payment_processed,
 )
+from db.tokens import add_token_x
 from db.users import mark_user_has_paid
 from db.tariff import get_tariff_by_id
 from config import BOT_TOKEN, SUPPORT_GROUP_ID, SUBSCRIBE_TOPIC_ID
@@ -62,21 +61,13 @@ async def custom_404_handler(request: Request, exc):
 
     return HTMLResponse(content=html, status_code=404)
 
-# ------------------------------- Utilities ----------------------------------
-def _calc_expiry(days: int) -> datetime:
-    """Возвращает дату окончания (UTC) (8)."""
-    return datetime.now(timezone.utc) + timedelta(days=days)
-
 # ------------------------------- Webhook ------------------------------------
 @app.post("/yookassa")
 async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
     """Обработка webhook YooKassa (без логирования raw JSON) (1,16)."""
-    logger.info("WEBHOOK RAW BODY: %s", await request.json())
     bot: Bot = app.state.bot
-    admin_errors: list[str] = []  # (15) агрегируем ошибки
     try:
         data: dict[str, Any] = await request.json()
-        logger.info("WEBHOOK RAW BODY: %s", data)
         logger.info("🚀 [WEBHOOK] start: %s", data)
     except JSONDecodeError as e:  # (6) узкий except
         logger.error("❌ [WEBHOOK] Некорректный JSON в webhook: %s", e)
@@ -108,7 +99,7 @@ async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
                 return JSONResponse(content={"status": "ok", "duplicate": True})
 
     if payment_status == "succeeded":  # сохранили прежнюю проверку статуса
-        days = 0
+        token_x_amount = 0
         try:
             async with get_session() as session:
                 # Повторная проверка idempotency (гонка между процессами)
@@ -116,11 +107,17 @@ async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
                     logger.info("🔁 [WEBHOOK] Дубликат (гонка) webhook проигнорирован (payment_id=%s, user_id=%s)", payment_id, user_id)
                     return JSONResponse(content={"status": "ok", "duplicate": True})
                 tariff = await get_tariff_by_id(session, tariff_id)
-                days = tariff.duration_days  # type: ignore[assignment]
-                await add_subscriber_with_duration(session, user_id, days)
+                token_x_amount = tariff.duration_days  # type: ignore[assignment]
+                snapshot = await add_token_x(session, user_id, token_x_amount)
                 await mark_payment_processed(session, payment_id, user_id)
                 await mark_user_has_paid(session, user_id)
-                logger.info("✅ [PAYMENT] Подписка продлена: user_id=%s, дней=%s, тариф=%s", user_id, days, tariff_id)
+                await session.commit()
+                logger.info(
+                    "✅ [PAYMENT] Начислены tokenX: user_id=%s, token_x=%s, тариф=%s",
+                    user_id,
+                    token_x_amount,
+                    tariff_id,
+                )
         except Exception as e:  # (6)
             logger.exception("❌ [PAYMENT] Ошибка обработки тарифа/подписки (user_id=%s, tariff_id=%s)", user_id, tariff_id)
             raise HTTPException(status_code=400, detail="Tariff error") from e
@@ -130,15 +127,14 @@ async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
             user = await bot.get_chat(user_id)
             username = f"@{user.username}" if getattr(user, "username", None) else "—"
             full_name = getattr(user, "full_name", None) or getattr(user, "first_name", None) or "—"
-            expire_dt = _calc_expiry(days)
-            expire_str = expire_dt.strftime('%d.%m.%Y')  # локальный формат (8)
 
             await bot.send_message(
                 user_id,
                 (
-                    f"✅ Ваша подписка продлена на <b>{days} дней</b>!\n\n"
-                    f"🏷️ Тариф: <b>{getattr(tariff, 'name', '—')}</b>\n"
-                    f"📅 Действует до (UTC): <b>{expire_str}</b>"
+                    f"✅ Оплата прошла успешно!\n\n"
+                    f"🏷️ Пакет: <b>{getattr(tariff, 'name', '—')}</b>\n"
+                    f"💠 Начислено: <b>+{token_x_amount} tokenX</b>\n"
+                    f"💠 Баланс tokenX: <b>{snapshot.token_x}</b>"
                 ),
                 parse_mode="HTML",
             )
@@ -149,8 +145,8 @@ async def yookassa_webhook(request: Request) -> JSONResponse:  # (2)
                     f"👤 {full_name} ({username})\n"
                     f"🆔 <code>{user_id}</code>\n"
                     f"🏷️ {getattr(tariff, 'name', '—')}\n"
-                    f"⏳ {days} дн.\n"
-                    f"📅 До: {expire_str} (UTC)\n"
+                    f"💠 Начислено: +{token_x_amount} tokenX\n"
+                    f"💠 Баланс tokenX: {snapshot.token_x}\n"
                 ),
                 parse_mode="HTML",
                 message_thread_id=SUBSCRIBE_TOPIC_ID,

@@ -1,5 +1,5 @@
 from config import SUPPORT_GROUP_ID, SUBSCRIBE_TOPIC_ID
-"""Подписка: выбор тарифа и генерация ссылки на оплату."""
+"""Store: choose tokenX package and generate payment links."""
 import logging
 from contextlib import suppress
 
@@ -10,7 +10,8 @@ from aiogram.exceptions import TelegramAPIError
 
 from db.base import get_session
 from db.tariff import get_all_tariffs, get_tariff_by_id
-from db.subscribers import add_subscriber_with_duration
+from db.tokens import add_token_x
+from db.users import mark_user_has_paid
 import uuid
 from loader import crypto_pay
 from utils.currency import rub_to_usdt
@@ -23,14 +24,9 @@ router = Router()
 BUY_PREFIX = "buy_tariff:"
 PARSE_MODE = "HTML"
 SUBSCRIBE_HEADER = (
-    "<b>💎 Преимущества подписки:</b>\n\n"
-    "• 50 скачиваний в сутки\n"
-    "• Лимит размера файлов в 10 раз выше\n"
-    "• Ссылки на скачивание живут дольше\n"
-    "• Нет рекламы\n"
-    "• Не требуется подписка на каналы\n"
-    "• Доступно любое качество YouTube и аудио\n\n"
-    "Выберите вариант подписки:"
+    "<b>🛒 Магазин tokenX</b>\n\n"
+    "tokenX используются для YouTube 1440p/4k и сброса лимита TikTok/Instagram.\n\n"
+    "Выберите пакет:"
 )
 
 def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
@@ -39,7 +35,10 @@ def _build_tariffs_keyboard(tariffs) -> types.InlineKeyboardMarkup:
     # Сортировка тарифов по цене по возрастанию
     for t in sorted(tariffs, key=lambda x: x.price):
         builder.button(
-            text=f"{t.name} — {getattr(t, 'price', t.price)} RUB ({getattr(t, 'star_price', t.price)}⭐️)",
+            text=(
+                f"{t.name} — +{t.duration_days} tokenX "
+                f"({getattr(t, 'price', t.price)} RUB / {getattr(t, 'star_price', t.price)}⭐️)"
+            ),
             callback_data=f"{BUY_PREFIX}{t.id}"
         )
     builder.button(text="⬅️ В профиль", callback_data="start")
@@ -89,7 +88,7 @@ async def _show_subscribe_menu(message: types.Message, callback: types.CallbackQ
 
 @router.callback_query(F.data.startswith(BUY_PREFIX))
 async def payment_callback_handler(callback: types.CallbackQuery) -> None:
-    """Создаёт платёж и выдаёт кнопку оплаты тарифа."""
+    """Показывает способы оплаты пакета tokenX."""
     user_id = callback.from_user.id
     raw = callback.data or ""
     try:
@@ -104,7 +103,7 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
         await callback.answer("Тариф не найден.", show_alert=True)
         return
 
-    # Показываем выбор способа оплаты: YooKassa или Stars
+    # Показываем выбор способа оплаты пакета tokenX
     builder = InlineKeyboardBuilder()
     # builder.button(
     #     text=f"💳 Оплатить {tariff.price} RUB",
@@ -116,7 +115,8 @@ async def payment_callback_handler(callback: types.CallbackQuery) -> None:
     builder.button(text="⬅️ Назад", callback_data="subscribe")
     builder.adjust(1)
     await callback.message.edit_text(
-        f"<b>Выберите способ оплаты для тарифа <u>{tariff.name}</u>:</b>\n\n",
+        f"<b>Выберите способ оплаты пакета <u>{tariff.name}</u></b>\n"
+        f"<b>Начисление:</b> +{tariff.duration_days} tokenX\n\n",
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
@@ -148,8 +148,8 @@ async def pay_stars_callback_handler(callback: types.CallbackQuery) -> None:
     )
     await callback.bot.send_invoice(
         chat_id=user_id,
-        title=f"Подписка: {tariff.name}",
-        description=f"💳 Для оплаты тарифа звёздами нажмите на кнопку оплаты",
+        title=f"Пакет tokenX: {tariff.name}",
+        description=f"💳 Оплата пакета +{tariff.duration_days} tokenX",
         payload=payload,
         provider_token="STARS",
         currency="XTR",
@@ -182,7 +182,7 @@ async def pay_yookassa_callback_handler(callback: types.CallbackQuery) -> None:
         payment_url, payment_id = create_payment(
             user_id=user_id,
             amount=tariff.price,
-            description=f"Подписка: {tariff.name}",
+            description=f"Пакет tokenX: {tariff.name}",
             bot_username=me.username or "bot",
             metadata={
                 "user_id": str(user_id),
@@ -199,7 +199,8 @@ async def pay_yookassa_callback_handler(callback: types.CallbackQuery) -> None:
     builder.button(text="⬅️ Назад", callback_data="subscribe")
     builder.adjust(1)
     await callback.message.edit_text(
-        f"<b>Оплата тарифа <u>{tariff.name}</u> через YooKassa</b>\n\n" +
+        f"<b>Оплата пакета <u>{tariff.name}</u> через YooKassa</b>\n\n" +
+        f"Начисление: <b>+{tariff.duration_days} tokenX</b>\n" +
         f"Сумма: <b>{tariff.price}₽</b>\n\n" +
         "Нажмите кнопку ниже для перехода к оплате.",
         parse_mode="HTML",
@@ -213,7 +214,7 @@ async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
 
 @router.message(F.content_type == 'successful_payment')
 async def stars_successful_payment_handler(message: types.Message) -> None:
-    """Обработка успешной оплаты Stars: продлеваем подписку."""
+    """Обработка успешной оплаты Stars: начисляем tokenX."""
     payment = message.successful_payment
     user_id = message.from_user.id
     payload = payment.invoice_payload  # формат: subscribe_{tariff_id}_{user_id}_{uuid}
@@ -233,7 +234,9 @@ async def stars_successful_payment_handler(message: types.Message) -> None:
         if not tariff:
             await message.answer("Ошибка: тариф не найден.")
             return
-        await add_subscriber_with_duration(session, user_id, tariff.duration_days)
+        await add_token_x(session, user_id, tariff.duration_days)
+        await mark_user_has_paid(session, user_id)
+        await session.commit()
 
     logger.info(
         "[STARS] successful_payment: user_id=%s, payload=%s, total_amount=%s, currency=%s, telegram_payment_charge_id=%s, provider_payment_charge_id=%s",
@@ -246,7 +249,11 @@ async def stars_successful_payment_handler(message: types.Message) -> None:
     )
 
     await message.answer(
-        f"✅ Оплата Stars прошла успешно!\nВаша подписка <b>{tariff.name}</b> активна на {tariff.duration_days} дней.",
+        (
+            "✅ Оплата Stars прошла успешно!\n"
+            f"Начислено: <b>+{tariff.duration_days} tokenX</b>\n"
+            f"Пакет: <b>{tariff.name}</b>."
+        ),
         parse_mode="HTML"
     )
     # Уведомление админу/группе
@@ -260,7 +267,7 @@ async def stars_successful_payment_handler(message: types.Message) -> None:
             f"👤 {full_name} ({username})\n"
             f"🆔 <code>{user.id}</code>\n"
             f"🏷️ {tariff.name}\n"
-            f"⏳ {tariff.duration_days} дн.\n"
+            f"💠 Начислено: +{tariff.duration_days} tokenX\n"
             f"💳 Telegram ID: <code>{payment.telegram_payment_charge_id}</code>\n"
             f"💳 Provider ID: <code>{payment.provider_payment_charge_id}</code>\n"
         ),
@@ -271,7 +278,7 @@ async def stars_successful_payment_handler(message: types.Message) -> None:
 
 @router.callback_query(F.data.startswith("pay_crypto:"))
 async def pay_crypto_callback_handler(callback: types.CallbackQuery) -> None:
-    """Создаёт тестовый крипто-инвойс через CryptoBot и отправляет ссылку на оплату."""
+    """Создаёт крипто-инвойс через CryptoBot и отправляет ссылку на оплату."""
     user_id = callback.from_user.id
     try:
         tariff_id = int(callback.data.split(":", 1)[1])
@@ -290,7 +297,7 @@ async def pay_crypto_callback_handler(callback: types.CallbackQuery) -> None:
 
     if usdt_amount is None:
         logger.error("❌ [SUBSCRIBE] Не удалось получить курс для конвертации в USDT для user=%s", user_id)
-        await callback.message.answer("Не удалось получить актуальный курс валют. Пожалуйста, попробуйте позже.", show_alert=True)
+        await callback.message.answer("Не удалось получить актуальный курс валют. Пожалуйста, попробуйте позже.")
         await callback.answer()
         return
 
@@ -305,7 +312,7 @@ async def pay_crypto_callback_handler(callback: types.CallbackQuery) -> None:
         invoice.poll(message=callback.message)
     except Exception as e:
         logger.exception("❌ [SUBSCRIBE] Ошибка создания крипто-инвойса для user=%s tariff=%s", user_id, tariff_id)
-        await callback.message.answer("Ошибка создания крипто-инвойса. Попробуйте позже.", show_alert=True)
+        await callback.message.answer("Ошибка создания крипто-инвойса. Попробуйте позже.")
         return
 
     markup = types.InlineKeyboardMarkup(
@@ -315,7 +322,11 @@ async def pay_crypto_callback_handler(callback: types.CallbackQuery) -> None:
         ]
     )
     await callback.message.answer(
-        f"Для оплаты тарифа <b>{tariff.name}</b> используйте кнопку ниже. Сумма: <b>{usdt_amount} USDT</b> (конвертация по актуальному курсу)",
+        (
+            f"Для оплаты пакета <b>{tariff.name}</b> используйте кнопку ниже.\n"
+            f"Начисление: <b>+{tariff.duration_days} tokenX</b>\n"
+            f"Сумма: <b>{usdt_amount} USDT</b> (конвертация по актуальному курсу)"
+        ),
         parse_mode="HTML",
         reply_markup=markup
     )

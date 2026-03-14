@@ -5,8 +5,8 @@ from aiogram import Bot
 
 
 from db.base import get_session
-from db.subscribers import add_subscriber_with_duration
 from db.tariff import get_tariff_by_id
+from db.tokens import add_token_x
 from db.users import get_user_by_id, mark_user_has_paid
 from config import SUBSCRIBE_TOPIC_ID, SUPPORT_GROUP_ID
 from loader import crypto_pay
@@ -40,15 +40,17 @@ async def crypto_payment_handler(invoice: Invoice, message: Message, bot: Bot):
             await message.answer("Не удалось найти информацию о пользователе или тарифе. Обратитесь в поддержку.")
             return
 
-        subscriber = await add_subscriber_with_duration(session, user_id, tariff.duration_days)
+        snapshot = await add_token_x(session, user_id, tariff.duration_days)
         await mark_user_has_paid(session, user_id)
+        await session.commit()
 
         # Notify user
         await message.answer(
             (f"✅ Оплата криптой успешно получена!\n\n"
             f"🏷️ Тариф: <b>{tariff.name}</b>\n"
-            f"⏳ Дней: <b>{tariff.duration_days}</b>\n"
-            f"📅 Подписка до: <b>{subscriber.expire_at.strftime('%d.%m.%Y')}</b>")
+            f"💠 Начислено: <b>+{tariff.duration_days} tokenX</b>\n"
+            f"💳 Текущий баланс tokenX: <b>{snapshot.token_x}</b>"),
+            parse_mode="HTML",
         )
 
         # Notify admin
@@ -59,8 +61,9 @@ async def crypto_payment_handler(invoice: Invoice, message: Message, bot: Bot):
             f"🆔 ID: <code>{user_id}</code>\n"
             f"🏷️ Тариф: <b>{tariff.name}</b>\n"
             f"💰 Сумма: <b>{invoice.amount} {invoice.asset}</b>\n"
-            f"⏳ Дней: <b>{tariff.duration_days}</b>\n"
-            f"📅 Подписка до: <b>{subscriber.expire_at.strftime('%d.%m.%Y')}</b>"),
-            message_thread_id=SUBSCRIBE_TOPIC_ID
+            f"💠 Начислено: <b>+{tariff.duration_days} tokenX</b>\n"
+            f"💠 Баланс tokenX: <b>{snapshot.token_x}</b>"),
+            message_thread_id=SUBSCRIBE_TOPIC_ID,
+            parse_mode="HTML",
         )
     logger.info(f"Successfully processed crypto payment {invoice.invoice_id} for user {user_id}")

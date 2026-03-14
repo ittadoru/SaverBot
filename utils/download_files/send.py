@@ -4,9 +4,6 @@ import logging
 from aiogram import Bot, types
 from aiogram.types import FSInputFile
 from .file_cleanup import remove_file_later
-from db.subscribers import is_subscriber as db_is_subscriber
-from db.base import get_session
-from config import DOMAIN
 
 
 logger = logging.getLogger(__name__)
@@ -19,12 +16,11 @@ async def send_video(
     file_path: str,
     width: int,
     height: int,
-):
+)-> bool:
     """
     Отправка уже скачанного файла:
-    - Если превышает технический лимит Telegram (~49 МБ) -> даём ссылку.
-    - Иначе отправляем напрямую.
-    Бизнес‑лимит (DOWNLOAD_FILE_LIMIT) теперь проверяется ДО скачивания в загрузчиках, чтобы не тратить ресурсы зря.
+    - Отправляем напрямую в Telegram.
+    - После отправки файл удаляется отложенно.
     """
  
     try:
@@ -42,6 +38,7 @@ async def send_video(
         logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
         logger.info("✅ [SEND] Отправка завершена")
+        return True
     except Exception as e:
         logger.error(f"❌ [SEND] Ошибка при отправке видео: {e}")
         # Удаляем файл при ошибке
@@ -50,9 +47,10 @@ async def send_video(
             await asyncio.to_thread(os.remove, file_path)
         except Exception:
             pass
+        return False
 
 
-async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: str):
+async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: str) -> bool:
     """
     Отправляет аудио в чат с подписью.
     Файл удаляется через 10 секунд после отправки.
@@ -69,9 +67,12 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
         logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
         logger.info("✅ [SEND] Отправка завершена")
+        return True
     except Exception as e:
         logger.error(f"❌ [SEND] Ошибка при отправке аудио: {e}")
         try:
             await bot.send_message(chat_id, "❗️ Ошибка при отправке аудио. Попробуйте позже.")
+            await asyncio.to_thread(os.remove, file_path)
         except Exception:
             pass
+        return False

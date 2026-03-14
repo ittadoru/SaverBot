@@ -33,7 +33,7 @@ async def tariff_menu(message: Message, edit: bool = False) -> None:
     summary_lines = ["<b>💰 Меню управления тарифами</b>\n"]
     if tariffs:
         for t in tariffs:
-            summary_lines.append(f"• <b>#{t.id} {t.name}</b> — {t.duration_days} дн. / {t.price} ₽")
+            summary_lines.append(f"• <b>#{t.id} {t.name}</b> — +{t.duration_days} tokenX / {t.price} ₽")
     else:
         summary_lines.append("<i>Пока нет ни одного тарифа. Добавьте первый!</i>")
     text = "\n".join(summary_lines)
@@ -69,7 +69,7 @@ async def delete_tariff_menu_callback(callback: CallbackQuery) -> None:
 
     for t in tariffs:
         builder.button(
-            text=f"❌ {t.name} ({t.duration_days} д., {t.price} ₽)",
+            text=f"❌ {t.name} (+{t.duration_days} tokenX, {t.price} ₽)",
             callback_data=f"delete_tariff_confirm:{t.id}",
         )
     builder.button(text="⬅️ Назад в меню", callback_data="tariff_menu")
@@ -92,7 +92,7 @@ async def start_add_tariff(callback: CallbackQuery, state: FSMContext) -> None:
     kb.button(text="⬅️ Отмена", callback_data="tariff_menu")
     kb.adjust(1)
     await callback.message.edit_text(
-        "<b>➕ Добавление тарифа</b>\n\n<code>Название, дни, цена, цена_звёздами (опционально)</code> через запятую.\nПример: <code>1 год, 365, 349, 299</code>",
+        "<b>➕ Добавление тарифа</b>\n\n<code>Название, tokenX, цена, цена_звёздами (опционально)</code> через запятую.\nПример: <code>Пакет S, 25, 149, 129</code>",
         parse_mode="HTML",
         reply_markup=kb.as_markup()
     )
@@ -117,7 +117,7 @@ async def delete_tariff_handler(callback: CallbackQuery) -> None:
 
 @router.message(TariffStates.waiting_for_name)
 async def process_tariff_name(message: Message, state: FSMContext) -> None:
-    """Обрабатывает название тарифа и запрашивает длительность, либо парсит всё одной строкой через запятую."""
+    """Обрабатывает ввод тарифа и парсит строку вида name, tokenX, price[, star_price]."""
     raw = (message.text or "").strip()
     parts = [p.strip() for p in raw.split(",")]
     if len(parts) not in (3, 4):
@@ -125,7 +125,7 @@ async def process_tariff_name(message: Message, state: FSMContext) -> None:
         kb.button(text="⬅️ Отмена", callback_data="tariff_menu")
         kb.adjust(1)
         await message.answer(
-            "❗️ <b>Формат: название, дни, цена, цена_звёздами (опционально)</b>\nПример: <code>1 год, 365, 349, 299</code>",
+            "❗️ <b>Формат: название, tokenX, цена, цена_звёздами (опционально)</b>\nПример: <code>Пакет S, 25, 149, 129</code>",
             parse_mode="HTML",
             reply_markup=kb.as_markup()
         )
@@ -137,7 +137,7 @@ async def process_tariff_name(message: Message, state: FSMContext) -> None:
         kb.button(text="⬅️ Отмена", callback_data="tariff_menu")
         kb.adjust(1)
         await message.answer(
-            "❗️ <b>Проверьте формат:</b> название (до 50), дни (целое), цена (целое), цена_звёздами (целое)\nПример: <code>1 год, 365, 349, 299</code>",
+            "❗️ <b>Проверьте формат:</b> название (до 50), tokenX (целое), цена (целое), цена_звёздами (целое)\nПример: <code>Пакет S, 25, 149, 129</code>",
             parse_mode="HTML",
             reply_markup=kb.as_markup()
         )
@@ -145,11 +145,11 @@ async def process_tariff_name(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
         await create_tariff(session, name=name, price=int(price), star_price=int(star_price), duration_days=int(days))
     logger.info(
-        "Админ %d создал новый тариф: %s, %s дней, %s ₽, %s ⭐️",
+        "Админ %d создал новый тариф: %s, +%s tokenX, %s ₽, %s ⭐️",
         message.from_user.id, name, days, price, star_price
     )
     await message.answer(
-        f"✅ <b>Тариф «{name}» успешно добавлен!</b>\nДлительность: <b>{days}</b> дней\nЦена: <b>{price} ₽</b>\nЦена звёздами: <b>{star_price} ⭐️</b>",
+        f"✅ <b>Тариф «{name}» успешно добавлен!</b>\nНачисление: <b>+{days} tokenX</b>\nЦена: <b>{price} ₽</b>\nЦена звёздами: <b>{star_price} ⭐️</b>",
         parse_mode="HTML"
     )
     await state.clear()
@@ -180,7 +180,7 @@ async def edit_tariff_field_select(callback: CallbackQuery, state: FSMContext) -
     await state.update_data(edit_tariff_id=tariff_id)
     kb = InlineKeyboardBuilder()
     kb.button(text="📝 Имя", callback_data="edit_field:name")
-    kb.button(text="📅 Дни", callback_data="edit_field:days")
+    kb.button(text="💠 tokenX", callback_data="edit_field:days")
     kb.button(text="💰 Цена", callback_data="edit_field:price")
     kb.button(text="⭐️ Цена звёздами", callback_data="edit_field:star_price")
     kb.button(text="⬅️ Назад в меню", callback_data="tariff_menu")
@@ -198,7 +198,7 @@ async def edit_tariff_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(edit_field=field)
     prompt_map = {
         "name": "<b>Введите новое имя тарифа:</b>",
-        "days": "<b>Введите новую длительность (целое число дней):</b>",
+        "days": "<b>Введите новое количество tokenX (целое число):</b>",
         "price": "<b>Введите новую цену (целое число руб.):</b>",
         "star_price": "<b>Введите новую цену тарифа в звёздах (целое число):</b>",
     }
@@ -231,7 +231,7 @@ async def process_edit_value(message: Message, state: FSMContext) -> None:
     elif field == "days":
         if not raw.isdigit() or not (0 < int(raw) < 10000):
             await message.answer(
-                "❗️ <b>Некорректное число дней. Повторите:</b>",
+                "❗️ <b>Некорректное количество tokenX. Повторите:</b>",
                 parse_mode="HTML"
             )
             return

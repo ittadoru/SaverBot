@@ -27,7 +27,7 @@ class InstagramDownloader(BaseDownloader):
         insta_password = (os.environ.get("INSTAGRAM_PASSWORD") or "").strip()
 
         ydl_opts = {
-            "format": "mp4",
+            "format": "bv*+ba/b",
             "outtmpl": filename,
             "merge_output_format": "mp4",
             "quiet": False,

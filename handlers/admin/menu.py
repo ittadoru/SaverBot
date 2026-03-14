@@ -1,4 +1,4 @@
-"""Главное меню админа: доступ к статистике, пользователям, промокодам, логам, экспорту, тарифам и рассылкам."""
+"""Главное меню админа: статистика, пользователи, тарифы, каналы, базовая рассылка."""
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -16,19 +16,12 @@ def get_admin_menu_keyboard():
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="📊 Статистика", callback_data="stats"))
     builder.row(InlineKeyboardButton(text="👥 Пользователи", callback_data="manage_users"))
+    builder.row(InlineKeyboardButton(text="💳 Тарифы", callback_data="tariff_menu"))
     builder.row(
-        InlineKeyboardButton(text="💳 Тарифы", callback_data="tariff_menu"),
-        InlineKeyboardButton(text="🎟 Промокоды", callback_data="promocode_menu")
-    )
-    builder.row(
-        InlineKeyboardButton(text="📦 Логи", callback_data="get_logs"),
-        InlineKeyboardButton(text="📊 Таблицы", callback_data="export_table_menu"),
         InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu")
     )
     builder.row(
-        InlineKeyboardButton(text="📨 Обычная", callback_data="broadcast_start"),
-        InlineKeyboardButton(text="💸 Реклама", callback_data="ad_broadcast_start"),
-        InlineKeyboardButton(text="🎯 Новички", callback_data="trial_broadcast_start")
+        InlineKeyboardButton(text="📨 Рассылка", callback_data="broadcast_start"),
     )
     builder.row(InlineKeyboardButton(text="🗑️ Очистить downloads", callback_data="clear_downloads"))
     return builder.as_markup()
@@ -41,17 +34,11 @@ async def admin_panel(message: Message):
 
     await message.answer(
     "<b>🔐 Админ-панель</b>\n\n"
-    "Добро пожаловать! Здесь вы можете управлять пользователями, тарифами, промокодами, логами и рассылками.\n"
+    "Добро пожаловать! Здесь вы можете управлять пользователями, тарифами, каналами и рассылками.\n"
     "\nВыберите нужный раздел ниже:",
         reply_markup=get_admin_menu_keyboard(),
         parse_mode="HTML"
     )
-
-@router.callback_query(F.data == "promocode_menu")
-async def promocode_menu_entry(callback: CallbackQuery):
-    """Перехватывает вход в меню промокодов и вызывает основную функцию отображения."""
-    from .promo import show_promo_menu
-    await show_promo_menu(callback)
 
 
 @router.callback_query(F.data == "manage_users")
@@ -66,7 +53,7 @@ async def back_to_admin_menu(callback: CallbackQuery):
     """Обрабатывает кнопку 'Назад', возвращая к главной админ-панели."""
     await callback.message.edit_text(
     "<b>🔐 Админ-панель</b>\n\n"
-    "Добро пожаловать! Здесь вы можете управлять пользователями, тарифами, промокодами, логами и рассылками.\n"
+    "Добро пожаловать! Здесь вы можете управлять пользователями, тарифами, каналами и рассылками.\n"
     "\nВыберите нужный раздел ниже:",
         reply_markup=get_admin_menu_keyboard(),
         parse_mode="HTML"

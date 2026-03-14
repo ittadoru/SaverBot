@@ -1,7 +1,4 @@
-"""
-Обработчик админ-команды: топ-10 пользователей по количеству рефералов.
-Красивое оформление, кнопка "Назад".
-"""
+"""Обработчик админ-команды: топ-10 пользователей по количеству приглашений."""
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -17,9 +14,7 @@ router = Router()
 
 @router.callback_query(F.data == "top_referrals")
 async def admin_top_referrals(callback: CallbackQuery) -> None:
-    """
-    Показывает топ-10 пользователей по количеству рефералов с красивым оформлением и кнопкой "Назад".
-    """
+    """Показывает топ-10 пользователей по количеству приглашений."""
     admin_id = callback.from_user.id
     try:
         async with get_session() as session:
@@ -37,8 +32,7 @@ async def admin_top_referrals(callback: CallbackQuery) -> None:
                 medal = medals[i - 1] if i <= len(medals) else "🏅"
                 uname = f"<b>@{u.username}</b>" if u.username else f"<code>{u.id}</code>"
                 text += (
-                    f"{medal} {uname} — <b>{u.ref_count}</b> рефералов | "
-                    f"уровень <b>{u.level}</b>\n"
+                    f"{medal} {uname} — <b>{u.ref_count}</b> приглашений\n"
                 )
 
         try:

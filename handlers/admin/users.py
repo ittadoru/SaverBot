@@ -5,13 +5,14 @@ from math import ceil
 
 from aiogram import F, Router, types
 from aiogram.filters.callback_data import CallbackData
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from utils.keyboards import pagination_keyboard
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import ADMINS
 from db.base import get_session
-from db.subscribers import is_subscriber
+from db.tokens import get_token_snapshot
 from db.users import (delete_user_by_id, get_all_user_ids, get_total_users,
                     get_users_by_ids)
 
@@ -38,7 +39,7 @@ async def manage_users_menu(callback: types.CallbackQuery):
     """Отображает меню управления пользователями."""
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="👥 Все пользователи", callback_data="all_users"))
-    builder.row(InlineKeyboardButton(text="🏆 Топ рефералов", callback_data="top_referrals"))
+    builder.row(InlineKeyboardButton(text="🏆 Топ приглашений", callback_data="top_referrals"))
     builder.row(InlineKeyboardButton(text="🔍 Поиск пользователя", callback_data="user_history_start"))
     builder.row(InlineKeyboardButton(text="🗑️ Удалить всех", callback_data="delete_all_users"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_menu"))
@@ -50,7 +51,7 @@ async def manage_users_menu(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[str, InlineKeyboardBuilder]:
+async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[str, InlineKeyboardMarkup]:
     """
     Возвращает текст и клавиатуру для страницы пользователей. Упрощённая и дружелюбная версия.
     """
@@ -66,11 +67,15 @@ async def _get_users_page_markup(session: AsyncSession, page: int = 1) -> tuple[
     else:
         text = "<b>👥 Список пользователей</b>\n\n"
         for user in users:
-            is_sub = await is_subscriber(session, user.id)
-            status_icon = "💎" if is_sub else "❌"
+            snapshot = await get_token_snapshot(session, user.id, refresh_daily=True)
+            status_icon = "💠" if snapshot.token_x > 0 else "🪙"
             username = f" (@{user.username})" if user.username else ""
-            text += f"{status_icon} <code>{user.id}</code> — {user.first_name}{username}\n"
+            text += (
+                f"{status_icon} <code>{user.id}</code> — {user.first_name}{username} "
+                f"(T:{snapshot.total_tokens} TX:{snapshot.token_x})\n"
+            )
 
+    await session.commit()
     nav = pagination_keyboard(page, total_pages, prefix="users_page", extra_buttons=[("⬅️ Назад", "manage_users")])
     return text, nav
 
@@ -95,7 +100,7 @@ async def paginate_users_handler(callback: types.CallbackQuery, callback_data: U
     async with get_session() as session:
         text, builder = await _get_users_page_markup(session, page)
         await callback.message.edit_text(
-            text, parse_mode="HTML", reply_markup=builder.as_markup()
+            text, parse_mode="HTML", reply_markup=builder
         )
     await callback.answer()
 
@@ -140,4 +145,3 @@ async def delete_all_users_handler(callback: types.CallbackQuery, callback_data:
     )
     await callback.answer("✅ <b>Все пользователи были успешно удалены!</b>", show_alert=True)
     await callback.message.delete()
-

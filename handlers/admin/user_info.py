@@ -11,11 +11,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import ADMINS
-from db import subscribers as db_subscribers
 from db import users as db_users
 from db import downloads as db_downloads
+from db import tokens as db_tokens
 from db.base import get_session
 from db.users import User
+from config import SOCIAL_DAILY_LIMIT
 from states.history import HistoryStates
 
 
@@ -87,15 +88,9 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
             )
             return
 
-        expiry_date = await db_subscribers.get_subscriber_expiry(session, user.id)
-        now_utc = datetime.now(timezone.utc)
-        if expiry_date and expiry_date.tzinfo is None:
-            expiry_date = expiry_date.replace(tzinfo=timezone.utc)
-
-        if expiry_date and expiry_date > now_utc:
-            subscription_status = f"✅ Активна до <b>{expiry_date.strftime('%d.%m.%Y %H:%M')}</b> UTC"
-        else:
-            subscription_status = "❌ Не активна"
+        snapshot = await db_tokens.get_token_snapshot(session, user.id, refresh_daily=True)
+        social_used = await db_tokens.get_daily_social_usage(session, user.id)
+        social_left = max(0, SOCIAL_DAILY_LIMIT - social_used)
 
         # Получаем последние 3 ссылки с временем создания
         last_links = await db_downloads.get_last_links(session, user.id, limit=3, include_time=True)
@@ -142,9 +137,12 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
             f"<b>Имя:</b> {user.first_name or 'не указано'}\n"
             f"<b>Username:</b> {f'@{user.username}' if user.username else 'не указан'}\n"
             f"<b>Зарегистрирован:</b> {user.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-            f"<b>Подписка:</b> {subscription_status}\n\n"
+            f"<b>Токены:</b> {snapshot.total_tokens} (daily {snapshot.daily_tokens}, bonus {snapshot.bonus_tokens})\n"
+            f"<b>tokenX:</b> {snapshot.token_x}\n"
+            f"<b>TT/IG осталось сегодня:</b> {social_left}/{SOCIAL_DAILY_LIMIT}\n\n"
             f"<b>Последние 3 ссылки:</b>\n<pre>{links_block}</pre>"
         )
+        await session.commit()
 
     builder = InlineKeyboardBuilder()
     builder.button(

@@ -26,7 +26,7 @@ class TikTokDownloader(BaseDownloader):
         proxy = (os.environ.get("TIKTOK_PROXY") or os.environ.get("YTDLP_PROXY") or "").strip()
 
         ydl_opts = {
-            "format": "mp4",
+            "format": "bv*+ba/b",
             "outtmpl": filename,
             "merge_output_format": "mp4",
             "quiet": False,
