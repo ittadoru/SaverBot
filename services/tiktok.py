@@ -6,6 +6,7 @@ import time
 import yt_dlp
 from aiogram import types
 from config import DOWNLOAD_DIR
+from services.fastsaver import FastSaverClient
 from utils.logger import get_logger, YTDlpLoggerAdapter
 
 logger = get_logger(__name__, platform="tiktok")
@@ -88,6 +89,21 @@ class TikTokDownloader(BaseDownloader):
             return "FAILED"
 
         status = await loop.run_in_executor(None, run_download_with_retries)
+
+        # Fallback: один вызов FastSaver /get-info на один пользовательский запрос.
+        if status != "OK":
+            fastsaver = FastSaverClient()
+            if fastsaver.enabled and fastsaver.enabled_for_tiktok:
+                logger.info("🛟 [DOWNLOAD] yt-dlp failed (status=%s), пробуем FastSaver fallback", status)
+                info_payload = await fastsaver.get_info(url)
+                media_url = fastsaver.pick_download_url(info_payload)
+                if media_url:
+                    downloaded = await fastsaver.download_to_file(media_url, filename)
+                    if downloaded:
+                        logger.info("✅ [DOWNLOAD] FastSaver fallback done file=%s", filename)
+                        return filename
+                logger.warning("⚠️ [DOWNLOAD] FastSaver fallback не смог скачать url=%s", url)
+
         if status == "IP_BLOCKED":
             return ("IP_BLOCKED", "TikTok заблокировал IP адрес сервера")
         if status == "LOGIN_REQUIRED":
