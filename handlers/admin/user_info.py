@@ -139,7 +139,7 @@ async def process_user_lookup(message: types.Message, state: FSMContext, bot: Bo
             f"<b>Зарегистрирован:</b> {user.created_at.strftime('%d.%m.%Y %H:%M')}\n"
             f"<b>Токены:</b> {snapshot.total_tokens} (daily {snapshot.daily_tokens}, bonus {snapshot.bonus_tokens})\n"
             f"<b>tokenX:</b> {snapshot.token_x}\n"
-            f"<b>TT/IG осталось сегодня:</b> {social_left}/{SOCIAL_DAILY_LIMIT}\n\n"
+            f"<b>Tiktok/Insta осталось сегодня:</b> {social_left}/{SOCIAL_DAILY_LIMIT}\n\n"
             f"<b>Последние 3 ссылки:</b>\n<pre>{links_block}</pre>"
         )
         await session.commit()

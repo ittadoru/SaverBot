@@ -7,6 +7,7 @@ from .file_cleanup import remove_file_later
 
 
 logger = logging.getLogger(__name__)
+UPLOAD_REQUEST_TIMEOUT_SECONDS = 600
 
 async def send_video(
     bot: Bot,
@@ -33,6 +34,7 @@ async def send_video(
             width=width,
             height=height,
             supports_streaming=True,
+            request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
         )
         # Удаляем файл спустя 10 секунд после отправки
         logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")
@@ -61,7 +63,8 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
         await bot.send_audio(
             chat_id=chat_id,
             audio=FSInputFile(file_path),
-            caption = f"🎵 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}"
+            caption = f"🎵 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}",
+            request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
         )
         # Удаляем файл спустя 10 секунд после отправки
         logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")

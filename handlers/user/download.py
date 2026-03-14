@@ -2,6 +2,7 @@ import logging
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 
+from config import ADMINS
 from utils.download_files.clean_url import strip_url_after_ampersand
 from utils.platform_detect import detect_platform
 from utils.download_files.download_manager import (
@@ -52,7 +53,10 @@ async def download_handler(message: types.Message, state: FSMContext):
         await process_youtube_or_other(message, url, user.id, platform, state)
     except Exception as e:
         logger.error(f"❌ Ошибка в download_handler: {e}", exc_info=True)
-        await message.answer("❗️ Ошибка при скачивании, попробуйте позже.")
+        if message.from_user.id in ADMINS:
+            await message.answer(f"❗️ Ошибка при скачивании: {e}")
+        else:
+            await message.answer("❗️ Произошла ошибка. Попробуйте позже.")
     finally:
         await set_busy(state, False)
         await wait_message.delete()
@@ -73,7 +77,10 @@ async def ytopt_callback_handler(callback: types.CallbackQuery, state: FSMContex
         await process_youtube_or_other(callback.message, url, user.id, "youtube", state, quality)
     except Exception as e:
         logger.error(f"❌ Ошибка в ytopt_callback_handler: {e}", exc_info=True)
-        await callback.answer("❗️ Ошибка при скачивании, попробуйте позже.", show_alert=True)
+        if callback.from_user.id in ADMINS:
+            await callback.answer(f"❗️ Ошибка при скачивании: {e}", show_alert=True)
+        else:
+            await callback.answer("❗️ Произошла ошибка. Попробуйте позже.", show_alert=True)
     finally:
         await set_busy(state, False)
 

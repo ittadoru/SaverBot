@@ -1,4 +1,4 @@
-"""User token actions: balances, exchange and daily TT/IG limit reset."""
+"""User token actions: balances, exchange and daily Tiktok/Insta limit reset."""
 
 from __future__ import annotations
 
@@ -33,11 +33,11 @@ def _tokens_keyboard() -> types.InlineKeyboardMarkup:
         callback_data="exchange_tokenx_1",
     )
     builder.button(
-        text=f"♻️ Сброс TT/IG за {SOCIAL_RESET_TOKEN_COST} токенов",
+        text=f"♻️ Сброс Tiktok/Insta за {SOCIAL_RESET_TOKEN_COST} токенов",
         callback_data="social_reset:token",
     )
     builder.button(
-        text=f"♻️ Сброс TT/IG за {SOCIAL_RESET_TOKEN_X_COST} tokenX",
+        text=f"♻️ Сброс Tiktok/Insta за {SOCIAL_RESET_TOKEN_X_COST} tokenX",
         callback_data="social_reset:tokenx",
     )
     builder.button(text="⬅️ Назад", callback_data="start")
@@ -58,7 +58,7 @@ async def build_profile_block(user_id: int) -> str:
         f"<b>•</b> Токены: <b>{snapshot.total_tokens}</b> "
         f"(ежедневные: {snapshot.daily_tokens}, бонусные: {snapshot.bonus_tokens})\n"
         f"<b>•</b> tokenX: <b>{snapshot.token_x}</b>\n"
-        f"<b>•</b> Осталось TT/IG сегодня: <b>{social_left}/{SOCIAL_DAILY_LIMIT}</b>\n"
+        f"<b>•</b> Осталось Tiktok/Insta сегодня: <b>{social_left}/{SOCIAL_DAILY_LIMIT}</b>\n"
         f"<b>•</b> Всего скачиваний: <b>{total_downloads}</b>"
     )
 
@@ -69,7 +69,7 @@ async def tokens_menu(callback: types.CallbackQuery) -> None:
     text = (
         "<b>💱 Токены и лимиты</b>\n\n"
         f"{profile}\n\n"
-        "Здесь можно обменять tokenX и сбросить дневной лимит TT/IG."
+        "Здесь можно обменять tokenX и сбросить дневной лимит Tiktok/Insta."
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_tokens_keyboard())
     await callback.answer()
@@ -128,5 +128,4 @@ async def social_reset_limit(callback: types.CallbackQuery) -> None:
         await reset_daily_social_usage(session, user_id)
         await session.commit()
 
-    await callback.answer("✅ Лимит TT/IG сброшен. Можно скачивать снова.", show_alert=True)
-
+    await callback.answer("✅ Лимит Tiktok/Insta сброшен. Можно скачивать снова.", show_alert=True)

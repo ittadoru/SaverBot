@@ -14,11 +14,11 @@ from config import REFERRAL_BONUS_TOKENS, REFERRAL_BONUS_TOKEN_X
 router = Router()
 
 REFERRAL_LINK_TEXT = (
-    "<b>👥 Пригласи друга и получай токены</b>\n\n"
-    f"За каждого нового пользователя по твоей ссылке: "
-    f"<b>+{REFERRAL_BONUS_TOKENS} токенов</b> и <b>+{REFERRAL_BONUS_TOKEN_X} tokenX</b>.\n\n"
-    "Нажми кнопку ниже, чтобы быстро поделиться ссылкой.\n\n"
-    "👤 Приглашено: <b>{count}</b> чел."
+    "<b>👥 Ваша реферальная программа</b>\n"
+    "Приглашайте друзей и получайте за это бонусы!\n\n"
+    "🎖️ Вы пригласили: <b>{count}</b> чел.\n\n"
+    f"🎁 За каждого приглашенного друга вы получаете "
+    f"<b>+{REFERRAL_BONUS_TOKENS} токенов</b> и <b>+{REFERRAL_BONUS_TOKEN_X} tokenX</b>."
 )
 
 

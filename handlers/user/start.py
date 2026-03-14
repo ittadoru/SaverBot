@@ -136,7 +136,7 @@ async def start_flow(event: Union[Message, CallbackQuery]):
 
     # показать главное меню
     profile_block = await build_profile_block(user_id)
-    text = MAIN_MENU_TEXT.format(username=user.username or "друг", profile_block=profile_block)
+    text = MAIN_MENU_TEXT.format(username=user.username or "", profile_block=profile_block)
     kb = get_main_menu_keyboard()
     try:
         if isinstance(event, CallbackQuery):

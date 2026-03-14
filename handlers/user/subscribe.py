@@ -25,7 +25,7 @@ BUY_PREFIX = "buy_tariff:"
 PARSE_MODE = "HTML"
 SUBSCRIBE_HEADER = (
     "<b>🛒 Магазин tokenX</b>\n\n"
-    "tokenX используются для YouTube 1440p/4k и сброса лимита TikTok/Instagram.\n\n"
+    "tokenX используются для YouTube 1440p/4k и сброса лимита Tiktok/Insta.\n\n"
     "Выберите пакет:"
 )
 

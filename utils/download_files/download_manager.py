@@ -29,10 +29,11 @@ from db.tokens import (
     spend_tokens,
 )
 from db.users import add_or_update_user, log_user_activity
-from config import SOCIAL_DAILY_LIMIT
+from config import ADMINS, SOCIAL_DAILY_LIMIT
 
 logger = logging.getLogger(__name__)
 BUSY_KEY = "busy"
+GENERIC_DOWNLOAD_ERROR_TEXT = "❗️Произошла ошибка. Попробуйте позже."
 
 
 async def is_busy(state: FSMContext) -> bool:
@@ -44,9 +45,17 @@ async def set_busy(state: FSMContext, value: bool):
     await state.update_data({BUSY_KEY: value})
 
 
+async def _send_error(message: types.Message, admin_text: str) -> None:
+    user_id = getattr(getattr(message, "from_user", None), "id", None)
+    if user_id in ADMINS:
+        await message.answer(admin_text)
+        return
+    await message.answer(GENERIC_DOWNLOAD_ERROR_TEXT)
+
+
 async def check_download_permissions(user_id: int, platform: str, bot: Bot | None = None):
     """
-    Checks mandatory channels and TT/IG daily limit.
+    Checks mandatory channels and Tiktok/Insta daily limit.
     Returns (can_download, reason_html).
     """
     async with get_session() as session:
@@ -76,7 +85,7 @@ async def check_download_permissions(user_id: int, platform: str, bot: Bot | Non
         return (
             False,
             (
-                f"⚠️ Достигнут лимит TikTok/Instagram: {SOCIAL_DAILY_LIMIT} в день.\n\n"
+                f"⚠️ Достигнут лимит Tiktok/Insta: {SOCIAL_DAILY_LIMIT} в день.\n\n"
                 "Открой раздел <b>Токены и лимиты</b> в /start, чтобы сбросить лимит:\n"
                 "• за 100 токенов\n"
                 "• или за 2 tokenX"
@@ -171,7 +180,7 @@ async def process_youtube_or_other(
                     file_path = await downloader.download_audio(url)
                     if not file_path:
                         await _refund_youtube(user_id, currency, amount)
-                        return await message.answer("❗️Не удалось скачать аудио.")
+                        return await _send_error(message, "❗️Не удалось скачать аудио.")
                     sent = await send_audio(message.bot, message, message.chat.id, file_path)
                     if not sent:
                         await _refund_youtube(user_id, currency, amount)
@@ -180,12 +189,12 @@ async def process_youtube_or_other(
                     itag = option.get("itag")
                     if not isinstance(itag, int):
                         await _refund_youtube(user_id, currency, amount)
-                        return await message.answer("❗️Формат недоступен для скачивания.")
+                        return await _send_error(message, "❗️Формат недоступен для скачивания.")
 
                     result = await downloader.download_by_itag(url, itag, message, user_id)
                     if not result or isinstance(result, tuple):
                         await _refund_youtube(user_id, currency, amount)
-                        return await message.answer("❗️Не удалось скачать видео.")
+                        return await _send_error(message, "❗️Не удалось скачать видео.")
 
                     file_path = result
                     w, h = get_video_resolution(file_path)
@@ -209,21 +218,23 @@ async def process_youtube_or_other(
         if result is None:
             logger.warning("[DOWNLOAD] downloader returned None for non-youtube: %s", url)
             if platform == "instagram":
-                return await message.answer(
+                return await _send_error(
+                    message,
                     "❗️Instagram не отдал медиа без авторизации. "
-                    "Пост может быть приватным или требовать cookies."
+                    "Пост может быть приватным или требовать cookies.",
                 )
-            return await message.answer("❗️Не удалось скачать: контент недоступен или нужен логин.")
+            return await _send_error(message, "❗️Не удалось скачать: контент недоступен или нужен логин.")
 
         if isinstance(result, tuple):
             if platform == "tiktok" and result[0] == "IP_BLOCKED":
-                return await message.answer(
+                return await _send_error(
+                    message,
                     "❗️TikTok блокирует IP сервера для этого видео. "
-                    "Нужен прокси/VPN для контейнера app."
+                    "Нужен прокси/VPN для контейнера app.",
                 )
             if platform == "tiktok" and result[0] == "LOGIN_REQUIRED":
-                return await message.answer("❗️TikTok требует cookies/авторизацию для этого видео.")
-            return await message.answer(f"❗️Ошибка при скачивании: {result}")
+                return await _send_error(message, "❗️TikTok требует cookies/авторизацию для этого видео.")
+            return await _send_error(message, f"❗️Ошибка при скачивании: {result}")
 
         file_path = result
         w, h = get_video_resolution(file_path)
@@ -234,6 +245,6 @@ async def process_youtube_or_other(
 
     except Exception as e:
         logger.error("❌ [DOWNLOAD] Ошибка при скачивании: %s", e, exc_info=True)
-        await message.answer("❗️Ошибка при скачивании, попробуйте позже.")
+        await _send_error(message, f"❗️Ошибка при скачивании: {e}")
     finally:
         await set_busy(state, False)

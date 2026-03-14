@@ -14,14 +14,9 @@ def get_main_menu_keyboard():
     builder.row(InlineKeyboardButton(text="🛒 Купить tokenX", callback_data="subscribe"))
     builder.row(InlineKeyboardButton(text="👥 Пригласить друга", callback_data="invite_friend"))
     builder.row(InlineKeyboardButton(text="🆘 Начать чат с поддержкой", callback_data="help"))
-    builder.row(
-        InlineKeyboardButton(text="ℹ️ Подробнее", callback_data="more_info"),
-    )
     return builder.as_markup()
 
 MAIN_MENU_TEXT = (
-    "<b>👋 Привет, {username}!</b>\n"
-    "<i>AtariSaver — токен-бот для YouTube, TikTok и Instagram.</i>\n\n"
-    "{profile_block}\n\n"
-    "Отправь ссылку для скачивания или выбери раздел ниже."
+    "<b>👋{username}</b>\n\n"
+    "{profile_block}"
 )
