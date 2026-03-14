@@ -8,6 +8,12 @@ from .file_cleanup import remove_file_later
 
 logger = logging.getLogger(__name__)
 UPLOAD_REQUEST_TIMEOUT_SECONDS = 600
+USE_LOCAL_FILE_URI = os.getenv("USE_LOCAL_FILE_URI", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _build_local_file_uri(file_path: str) -> str:
+    abs_path = os.path.abspath(file_path)
+    return f"file://{abs_path}"
 
 async def send_video(
     bot: Bot,
@@ -26,16 +32,41 @@ async def send_video(
  
     try:
         me = await bot.get_me()
-        # Отправка видео напрямую через Telegram (до 2 ГБ)
-        await bot.send_video(
-            chat_id=chat_id,
-            video=FSInputFile(file_path),
-            caption = f"🎬 Скачивай видео с Tiktok | Instagram | YouTube \n\n@{me.username}",      
-            width=width,
-            height=height,
-            supports_streaming=True,
-            request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
-        )
+        caption = f"🎬 Скачивай видео с Tiktok | Instagram | YouTube \n\n@{me.username}"
+        if USE_LOCAL_FILE_URI:
+            local_uri = _build_local_file_uri(file_path)
+            logger.info("📤 [SEND] Пытаемся отправить видео через local file URI: %s", local_uri)
+            try:
+                await bot.send_video(
+                    chat_id=chat_id,
+                    video=local_uri,
+                    caption=caption,
+                    width=width,
+                    height=height,
+                    supports_streaming=True,
+                    request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
+                )
+            except Exception as local_err:
+                logger.warning("⚠️ [SEND] local file URI не сработал, fallback на FSInputFile: %s", local_err)
+                await bot.send_video(
+                    chat_id=chat_id,
+                    video=FSInputFile(file_path),
+                    caption=caption,
+                    width=width,
+                    height=height,
+                    supports_streaming=True,
+                    request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
+                )
+        else:
+            await bot.send_video(
+                chat_id=chat_id,
+                video=FSInputFile(file_path),
+                caption=caption,
+                width=width,
+                height=height,
+                supports_streaming=True,
+                request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
+            )
         # Удаляем файл спустя 10 секунд после отправки
         logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
@@ -60,12 +91,32 @@ async def send_audio(bot: Bot, message:types.Message, chat_id: int, file_path: s
     try:
         logger.info("✉️ [SEND] Отправка audio в Telegram")
         me = await bot.get_me()
-        await bot.send_audio(
-            chat_id=chat_id,
-            audio=FSInputFile(file_path),
-            caption = f"🎵 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}",
-            request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
-        )
+        caption = f"🎵 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}"
+        if USE_LOCAL_FILE_URI:
+            local_uri = _build_local_file_uri(file_path)
+            logger.info("📤 [SEND] Пытаемся отправить аудио через local file URI: %s", local_uri)
+            try:
+                await bot.send_audio(
+                    chat_id=chat_id,
+                    audio=local_uri,
+                    caption=caption,
+                    request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
+                )
+            except Exception as local_err:
+                logger.warning("⚠️ [SEND] local file URI для аудио не сработал, fallback на FSInputFile: %s", local_err)
+                await bot.send_audio(
+                    chat_id=chat_id,
+                    audio=FSInputFile(file_path),
+                    caption=caption,
+                    request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
+                )
+        else:
+            await bot.send_audio(
+                chat_id=chat_id,
+                audio=FSInputFile(file_path),
+                caption=caption,
+                request_timeout=UPLOAD_REQUEST_TIMEOUT_SECONDS,
+            )
         # Удаляем файл спустя 10 секунд после отправки
         logger.info(f"🗑️ [SEND] Файл {file_path} будет удалён через 10 секунд")
         asyncio.create_task(remove_file_later(file_path, delay=10, message=message))
