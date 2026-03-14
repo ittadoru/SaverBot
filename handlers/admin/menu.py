@@ -14,13 +14,13 @@ router = Router()
 def get_admin_menu_keyboard():
     """Формирует и возвращает клавиатуру главной админ-панели."""
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="📊 Статистика", callback_data="stats"))
-    builder.row(InlineKeyboardButton(text="👥 Пользователи", callback_data="manage_users"))
-    builder.row(InlineKeyboardButton(text="💳 Тарифы", callback_data="tariff_menu"))
     builder.row(
-        InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu")
+        InlineKeyboardButton(text="📊 Статистика", callback_data="stats"),
+        InlineKeyboardButton(text="👥 Пользователи", callback_data="manage_users"),
     )
     builder.row(
+        InlineKeyboardButton(text="💳 Тарифы", callback_data="tariff_menu"),
+        InlineKeyboardButton(text="📢 Каналы", callback_data="channels_menu"),
         InlineKeyboardButton(text="📨 Рассылка", callback_data="broadcast_start"),
     )
     builder.row(InlineKeyboardButton(text="🗑️ Очистить downloads", callback_data="clear_downloads"))
