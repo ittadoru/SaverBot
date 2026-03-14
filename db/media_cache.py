@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import BigInteger, Column, DateTime, Integer, String, UniqueConstraint, func, select, delete
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.base import Base
+
+logger = logging.getLogger(__name__)
+_missing_table_warned = False
 
 
 class MediaCache(Base):
@@ -33,6 +39,21 @@ def _norm_quality(quality: str | None) -> str:
     return value or "default"
 
 
+def _is_media_cache_missing(exc: ProgrammingError) -> bool:
+    sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", None)
+    if sqlstate == "42P01":
+        return True
+    text = str(exc).lower()
+    return "undefinedtableerror" in text or 'relation "media_cache" does not exist' in text
+
+
+def _warn_missing_table_once() -> None:
+    global _missing_table_warned
+    if not _missing_table_warned:
+        logger.warning("media_cache table is missing in current DB. Cache is temporarily disabled.")
+        _missing_table_warned = True
+
+
 async def get_cached_file_id(
     session: AsyncSession,
     *,
@@ -49,8 +70,15 @@ async def get_cached_file_id(
         )
         .limit(1)
     )
-    result = await session.execute(query)
-    return result.scalar_one_or_none()
+    try:
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+    except ProgrammingError as exc:
+        if _is_media_cache_missing(exc):
+            await session.rollback()
+            _warn_missing_table_once()
+            return None
+        raise
 
 
 async def upsert_cached_media(
@@ -66,37 +94,44 @@ async def upsert_cached_media(
     if not file_id:
         return None
 
-    normalized_url = (url or "")[:1024]
-    normalized_media_type = _norm_media_type(media_type)
-    normalized_quality = _norm_quality(quality)
+    try:
+        normalized_url = (url or "")[:1024]
+        normalized_media_type = _norm_media_type(media_type)
+        normalized_quality = _norm_quality(quality)
 
-    row = (
-        await session.execute(
-            select(MediaCache).where(
-                MediaCache.url == normalized_url,
-                MediaCache.media_type == normalized_media_type,
-                MediaCache.quality == normalized_quality,
+        row = (
+            await session.execute(
+                select(MediaCache).where(
+                    MediaCache.url == normalized_url,
+                    MediaCache.media_type == normalized_media_type,
+                    MediaCache.quality == normalized_quality,
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
 
-    if row:
-        row.file_id = file_id
-        if created_by_user_id is not None:
-            row.created_by_user_id = created_by_user_id
+        if row:
+            row.file_id = file_id
+            if created_by_user_id is not None:
+                row.created_by_user_id = created_by_user_id
+            await session.flush()
+            return row
+
+        row = MediaCache(
+            url=normalized_url,
+            media_type=normalized_media_type,
+            quality=normalized_quality,
+            file_id=file_id,
+            created_by_user_id=created_by_user_id,
+        )
+        session.add(row)
         await session.flush()
         return row
-
-    row = MediaCache(
-        url=normalized_url,
-        media_type=normalized_media_type,
-        quality=normalized_quality,
-        file_id=file_id,
-        created_by_user_id=created_by_user_id,
-    )
-    session.add(row)
-    await session.flush()
-    return row
+    except ProgrammingError as exc:
+        if _is_media_cache_missing(exc):
+            await session.rollback()
+            _warn_missing_table_once()
+            return None
+        raise
 
 
 async def delete_cached_media(
@@ -106,11 +141,18 @@ async def delete_cached_media(
     media_type: str,
     quality: str | None,
 ) -> None:
-    await session.execute(
-        delete(MediaCache).where(
-            MediaCache.url == (url or "")[:1024],
-            MediaCache.media_type == _norm_media_type(media_type),
-            MediaCache.quality == _norm_quality(quality),
+    try:
+        await session.execute(
+            delete(MediaCache).where(
+                MediaCache.url == (url or "")[:1024],
+                MediaCache.media_type == _norm_media_type(media_type),
+                MediaCache.quality == _norm_quality(quality),
+            )
         )
-    )
-    await session.flush()
+        await session.flush()
+    except ProgrammingError as exc:
+        if _is_media_cache_missing(exc):
+            await session.rollback()
+            _warn_missing_table_once()
+            return
+        raise
