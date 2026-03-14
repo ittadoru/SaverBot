@@ -9,7 +9,7 @@ from config import (
 )
 
 
-YOUTUBE_QUALITY_ORDER = ("480p", "720p", "1080p", "1440p", "4k")
+YOUTUBE_QUALITY_ORDER = ("low", "medium", "high")
 YOUTUBE_ALLOWED_QUALITIES = set(YOUTUBE_QUALITY_ORDER) | {"audio"}
 
 
@@ -58,4 +58,3 @@ def format_duration(seconds: int) -> str:
     if hours:
         return f"{hours}:{minutes:02d}:{secs:02d}"
     return f"{minutes}:{secs:02d}"
-

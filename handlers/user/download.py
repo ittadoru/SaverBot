@@ -70,7 +70,7 @@ async def ytopt_callback_handler(callback: types.CallbackQuery, state: FSMContex
     await set_busy(state, True)
     try:
         _, quality = callback.data.split(":", 1)
-        await callback.message.answer("⏳ Скачиваем, подождите пару минут...")
+        await callback.message.answer("⏳ Скачиваем, подождите несколько минут...")
         data = await state.get_data()
         url = data.get("yt_url")
         user = callback.from_user

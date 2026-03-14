@@ -1,42 +1,43 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import YOUTUBE_MAX_DURATION_SECONDS
 from db.base import get_session
 from db.tokens import get_token_snapshot
 from services.youtube import YTDLPDownloader
-from utils.token_policy import (
-    YOUTUBE_QUALITY_ORDER,
-    format_duration,
-    get_youtube_price,
-)
+from utils.token_policy import YOUTUBE_QUALITY_ORDER, format_duration, get_youtube_price
 
 
-QUALITY_TO_RESOLUTION = {
-    "480p": 480,
-    "720p": 720,
-    "1080p": 1080,
-    "1440p": 1440,
-    "4k": 2160,
+QUALITY_LABELS = {
+    "low": "Низкое",
+    "medium": "Среднее",
+    "high": "Высокое",
 }
 
 
-def _pick_itag_for_resolution(formats: list[dict], resolution: int) -> int | None:
+def _currency_label(currency: str) -> str:
+    return "T" if currency == "token" else "TX"
+
+
+def _parse_resolution(fmt: dict) -> int | None:
+    res = fmt.get("res")
+    if not res or not str(res).endswith("p"):
+        return None
+    try:
+        return int(str(res).replace("p", ""))
+    except ValueError:
+        return None
+
+
+def _pick_best_itag_for_resolution(formats: list[dict], resolution: int) -> int | None:
     candidates: list[dict] = []
     for fmt in formats:
-        res = fmt.get("res")
-        if not res or not str(res).endswith("p"):
+        if _parse_resolution(fmt) != resolution:
             continue
-        try:
-            res_int = int(str(res).replace("p", ""))
-        except ValueError:
-            continue
-        if res_int == resolution:
-            candidates.append(fmt)
+        candidates.append(fmt)
 
     if not candidates:
         return None
 
-    # Prefer progressive streams, then larger filesize.
     candidates.sort(
         key=lambda x: (
             bool(x.get("progressive")),
@@ -47,8 +48,55 @@ def _pick_itag_for_resolution(formats: list[dict], resolution: int) -> int | Non
     return int(candidates[0]["itag"])
 
 
-def _currency_label(currency: str) -> str:
-    return "T" if currency == "token" else "TX"
+def _build_resolution_itags(formats: list[dict]) -> dict[int, int]:
+    resolutions = sorted({_parse_resolution(fmt) for fmt in formats if _parse_resolution(fmt) is not None})
+    result: dict[int, int] = {}
+    for res in resolutions:
+        itag = _pick_best_itag_for_resolution(formats, res)
+        if itag is not None:
+            result[res] = itag
+    return result
+
+
+def _pick_low(res_to_itag: dict[int, int]) -> tuple[int, int] | None:
+    if not res_to_itag:
+        return None
+    if 360 in res_to_itag:
+        return res_to_itag[360], 360
+
+    below_360 = sorted(res for res in res_to_itag if res < 360)
+    if below_360:
+        target = below_360[0]
+        return res_to_itag[target], target
+
+    return None
+
+
+def _pick_medium(res_to_itag: dict[int, int]) -> tuple[int, int] | None:
+    if 720 in res_to_itag:
+        return res_to_itag[720], 720
+    if 480 in res_to_itag:
+        return res_to_itag[480], 480
+    return None
+
+
+def _pick_high(res_to_itag: dict[int, int]) -> tuple[int, int] | None:
+    if 1440 in res_to_itag:
+        return res_to_itag[1440], 1440
+    if 1080 in res_to_itag:
+        return res_to_itag[1080], 1080
+    return None
+
+
+def _pick_itag_for_quality(formats: list[dict], quality: str) -> tuple[int, int] | None:
+    res_to_itag = _build_resolution_itags(formats)
+    if quality == "low":
+        return _pick_low(res_to_itag)
+    if quality == "medium":
+        return _pick_medium(res_to_itag)
+    if quality == "high":
+        return _pick_high(res_to_itag)
+    return None
 
 
 async def prepare_youtube_menu(url: str, user_id: int):
@@ -59,6 +107,7 @@ async def prepare_youtube_menu(url: str, user_id: int):
     info = await downloader.get_available_video_options(url)
     preview = info["thumbnail_url"]
     duration_seconds = int(info.get("duration_seconds") or 0)
+    formats = info.get("formats", [])
 
     async with get_session() as session:
         snapshot = await get_token_snapshot(session, user_id, refresh_daily=True)
@@ -83,26 +132,27 @@ async def prepare_youtube_menu(url: str, user_id: int):
         )
 
     for quality in YOUTUBE_QUALITY_ORDER:
-        target_res = QUALITY_TO_RESOLUTION[quality]
-        itag = _pick_itag_for_resolution(info["formats"], target_res)
+        pick = _pick_itag_for_quality(formats, quality)
         price = get_youtube_price(quality, duration_seconds)
+        if pick is None or price is None:
+            continue
 
-        if itag is None or price is None:
-            text = f"🔒 {quality}"
-            cb = "disabled"
-        else:
-            currency, amount = price
-            available_balance = snapshot.total_tokens if currency == "token" else snapshot.token_x
-            affordable = available_balance >= amount
-            cb = f"ytopt:{quality}" if affordable else "disabled"
-            icon = "⚡️" if affordable else "🔒"
-            text = f"{icon} {quality} · {amount}{_currency_label(currency)}"
-            options_payload[quality] = {
-                "itag": itag,
-                "currency": currency,
-                "cost": amount,
-            }
-            lines.append(f"{icon} {quality}: {amount} {_currency_label(currency)}")
+        itag, actual_res = pick
+        currency, amount = price
+        available_balance = snapshot.total_tokens if currency == "token" else snapshot.token_x
+        affordable = available_balance >= amount
+        cb = f"ytopt:{quality}" if affordable else "disabled"
+        icon = "⚡️" if affordable else "🔒"
+        quality_label = QUALITY_LABELS[quality]
+        text = f"{icon} {quality_label} · {amount}{_currency_label(currency)}"
+
+        options_payload[quality] = {
+            "itag": itag,
+            "currency": currency,
+            "cost": amount,
+            "actual_res": actual_res,
+        }
+        lines.append(f"{icon} {quality_label}: {amount} {_currency_label(currency)}")
 
         row.append(InlineKeyboardButton(text=text, callback_data=cb))
         if len(row) == 2:
@@ -131,8 +181,13 @@ async def prepare_youtube_menu(url: str, user_id: int):
             "itag": None,
             "currency": currency,
             "cost": amount,
+            "actual_res": None,
         }
         lines.append(f"{icon} Аудио: {amount} {_currency_label(currency)}")
+
+    if not options_payload:
+        rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="start")])
+        lines.append("❌ Для этого видео нет доступных форматов.")
 
     lines.append(
         "\n<b>Баланс:</b> "

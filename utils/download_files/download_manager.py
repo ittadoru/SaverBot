@@ -20,6 +20,11 @@ from db.downloads import (
     increment_daily_download,
 )
 from db.platforms import increment_platform_download
+from db.media_cache import (
+    delete_cached_media,
+    get_cached_file_id,
+    upsert_cached_media,
+)
 from db.tokens import (
     get_daily_social_usage,
     increment_daily_social_usage,
@@ -34,6 +39,7 @@ from config import ADMINS, SOCIAL_DAILY_LIMIT
 logger = logging.getLogger(__name__)
 BUSY_KEY = "busy"
 GENERIC_DOWNLOAD_ERROR_TEXT = "❗️Произошла ошибка. Попробуйте позже."
+CACHED_SEND_TIMEOUT_SECONDS = 600
 
 
 async def is_busy(state: FSMContext) -> bool:
@@ -140,6 +146,35 @@ async def _log_download(
         await session.commit()
 
 
+async def _send_cached_media(
+    message: types.Message,
+    *,
+    file_id: str,
+    media_type: str,
+) -> bool:
+    try:
+        me = await message.bot.get_me()
+        if media_type == "audio":
+            await message.bot.send_audio(
+                chat_id=message.chat.id,
+                audio=file_id,
+                caption=f"🎵 Скачивай аудио с Tiktok | Instagram | YouTube \n\n@{me.username}",
+                request_timeout=CACHED_SEND_TIMEOUT_SECONDS,
+            )
+        else:
+            await message.bot.send_video(
+                chat_id=message.chat.id,
+                video=file_id,
+                caption=f"🎬 Скачивай видео с Tiktok | Instagram | YouTube \n\n@{me.username}",
+                supports_streaming=True,
+                request_timeout=CACHED_SEND_TIMEOUT_SECONDS,
+            )
+        return True
+    except Exception as e:
+        logger.warning("⚠️ [CACHE] Не удалось отправить кэшированный file_id=%s: %s", file_id, e)
+        return False
+
+
 async def process_youtube_or_other(
     message: types.Message,
     url: str,
@@ -172,6 +207,34 @@ async def process_youtube_or_other(
                 token_name = "токенов" if currency == "token" else "tokenX"
                 return await message.answer(f"❗️Недостаточно {token_name} для этого качества.")
 
+            media_type = "audio" if quality == "audio" else "video"
+            cache_quality = quality
+            async with get_session() as session:
+                cached_file_id = await get_cached_file_id(
+                    session,
+                    url=url,
+                    media_type=media_type,
+                    quality=cache_quality,
+                )
+                await session.commit()
+            if cached_file_id:
+                sent_cached = await _send_cached_media(
+                    message,
+                    file_id=cached_file_id,
+                    media_type=media_type,
+                )
+                if sent_cached:
+                    await _log_download(message, user_id, platform, url)
+                    return
+                async with get_session() as session:
+                    await delete_cached_media(
+                        session,
+                        url=url,
+                        media_type=media_type,
+                        quality=cache_quality,
+                    )
+                    await session.commit()
+
             downloader = YTDLPDownloader()
             file_path: str | None = None
 
@@ -181,10 +244,21 @@ async def process_youtube_or_other(
                     if not file_path:
                         await _refund_youtube(user_id, currency, amount)
                         return await _send_error(message, "❗️Не удалось скачать аудио.")
-                    sent = await send_audio(message.bot, message, message.chat.id, file_path)
-                    if not sent:
+                    sent_ok, sent_file_id = await send_audio(message.bot, message, message.chat.id, file_path)
+                    if not sent_ok:
                         await _refund_youtube(user_id, currency, amount)
                         return
+                    if sent_file_id:
+                        async with get_session() as session:
+                            await upsert_cached_media(
+                                session,
+                                url=url,
+                                media_type="audio",
+                                quality=cache_quality,
+                                file_id=sent_file_id,
+                                created_by_user_id=user_id,
+                            )
+                            await session.commit()
                 else:
                     itag = option.get("itag")
                     if not isinstance(itag, int):
@@ -198,16 +272,51 @@ async def process_youtube_or_other(
 
                     file_path = result
                     w, h = get_video_resolution(file_path)
-                    sent = await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
-                    if not sent:
+                    sent_ok, sent_file_id = await send_video(
+                        message.bot, message, message.chat.id, user_id, file_path, w, h
+                    )
+                    if not sent_ok:
                         await _refund_youtube(user_id, currency, amount)
                         return
+                    if sent_file_id:
+                        async with get_session() as session:
+                            await upsert_cached_media(
+                                session,
+                                url=url,
+                                media_type="video",
+                                quality=cache_quality,
+                                file_id=sent_file_id,
+                                created_by_user_id=user_id,
+                            )
+                            await session.commit()
             except Exception:
                 await _refund_youtube(user_id, currency, amount)
                 raise
 
             await _log_download(message, user_id, platform, url)
             return
+
+        async with get_session() as session:
+            cached_file_id = await get_cached_file_id(
+                session,
+                url=url,
+                media_type="video",
+                quality="default",
+            )
+            await session.commit()
+        if cached_file_id:
+            sent_cached = await _send_cached_media(message, file_id=cached_file_id, media_type="video")
+            if sent_cached:
+                await _log_download(message, user_id, platform, url)
+                return
+            async with get_session() as session:
+                await delete_cached_media(
+                    session,
+                    url=url,
+                    media_type="video",
+                    quality="default",
+                )
+                await session.commit()
 
         downloader = get_downloader(url)
         if downloader is None:
@@ -238,9 +347,20 @@ async def process_youtube_or_other(
 
         file_path = result
         w, h = get_video_resolution(file_path)
-        sent = await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
-        if not sent:
+        sent_ok, sent_file_id = await send_video(message.bot, message, message.chat.id, user_id, file_path, w, h)
+        if not sent_ok:
             return
+        if sent_file_id:
+            async with get_session() as session:
+                await upsert_cached_media(
+                    session,
+                    url=url,
+                    media_type="video",
+                    quality="default",
+                    file_id=sent_file_id,
+                    created_by_user_id=user_id,
+                )
+                await session.commit()
         await _log_download(message, user_id, platform, url)
 
     except Exception as e:

@@ -41,11 +41,9 @@ YOUTUBE_DURATION_BUCKETS_SECONDS = (
     3 * 60 * 60,  # < 3 hours
 )
 YOUTUBE_PRICING = {
-    "480p": {"currency": "token", "tiers": (5, 10, 20)},
-    "720p": {"currency": "token", "tiers": (7, 15, 27)},
-    "1080p": {"currency": "token", "tiers": (10, 20, 35)},
-    "1440p": {"currency": "token_x", "tiers": (1, 3, 7)},
-    "4k": {"currency": "token_x", "tiers": (2, 7, 15)},
+    "low": {"currency": "token", "tiers": (4, 10, 20)},
+    "medium": {"currency": "token", "tiers": (7, 15, 35)},
+    "high": {"currency": "token_x", "tiers": (1, 4, 10)},
     "audio": {"currency": "token", "tiers": (2, 5, 10)},
 }
 
